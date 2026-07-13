@@ -1,0 +1,43 @@
+# Browser Automation
+playwright
+
+# MCP Framework
+fastmcp
+
+# LLM — Primary Backend (local, $0 cost, fully offline)
+ollama
+
+# LLM — Abstraction Layer (one interface regardless of active backend)
+litellm
+
+# LLM — Optional Fallback (Groq free tier, no credit card required)
+# Uncomment if local model is too slow/unreliable for a specific step.
+# groq
+
+# Templating
+jinja2
+
+# Validation
+jsonschema
+
+# Data Models
+pydantic
+
+# Environment Variables
+python-dotenv
+
+# CLI & Terminal UI
+typer
+rich
+
+# Testing
+pytest
+pytest-asyncio
+
+# HTTP Client (used internally by several libraries)
+httpx
+
+#Development
+ruff
+mypy
+pre-commit

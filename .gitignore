@@ -1,0 +1,31 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Test cache
+.pytest_cache/
+
+# Type-checker cache
+.mypy_cache/
+.ruff_cache/
+
+# Secrets — NEVER commit
+.env
+
+# BrowserBot generated output (git-ignored by design — Step 1.2)
+generated_tools/
+
+# Playwright artifacts
+.playwright/
+tests/fixtures/failure_screenshot.png
+
+# Pipeline logs (machine-generated)
+logs/
+
+# IDE
+.vscode/
+.idea/

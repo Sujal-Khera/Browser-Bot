@@ -1,0 +1,18 @@
+flowchart LR
+
+    User([Developer / User])
+    Claude([Claude Desktop])
+    Website([Target Website])
+
+    BrowserBot((BrowserBot))
+
+    MCPTool[[Generated MCP Tool]]
+
+    User -->|Record Workflow| BrowserBot
+    BrowserBot -->|Installable MCP Tool| MCPTool
+    MCPTool -->|Installed| Claude
+
+    Claude -->|Invoke Tool| MCPTool
+    MCPTool -->|Automate Browser| Website
+    Website -->|Business Data| MCPTool
+    MCPTool -->|Structured Response| Claude

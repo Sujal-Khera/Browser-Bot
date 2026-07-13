@@ -1,0 +1,5 @@
+# This directory will contain server.py.j2 (Phase 4, Step 4.1).
+#
+# The FastMCP server Jinja2 template is written by hand in Phase 4.
+# The LLM fills only the Playwright step sequence slot inside the template.
+# It does NOT generate any FastMCP boilerplate.

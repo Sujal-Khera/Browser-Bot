@@ -1,0 +1,47 @@
+sequenceDiagram
+    autonumber
+
+    actor User as Developer
+    participant Recorder
+    participant Orchestrator as Pipeline Orchestrator
+    participant Extractor as Pattern Extractor Agent
+    participant Generator as Code Generator Agent
+    participant Validator as Validator Agent
+    participant MCP as MCP Generator
+
+    User->>Recorder: Start recording workflow
+    Recorder->>Recorder: Capture browser interactions
+    Recorder-->>Orchestrator: recording.json
+
+    Orchestrator->>Orchestrator: Normalize actions
+    Orchestrator-->>Extractor: actions.json
+
+    Extractor->>Extractor: Analyze workflow
+    Extractor-->>Orchestrator: workflow_schema.json
+
+    Orchestrator->>User: Display extracted parameters
+    User-->>Orchestrator: Confirm / Edit parameters
+
+    Orchestrator-->>Generator: confirmed_schema.json
+    Generator->>Generator: Generate Playwright script using templates
+    Generator-->>Orchestrator: playwright_script.py
+
+    Orchestrator-->>Validator: Validate generated script
+
+    Validator->>Validator: JSON Schema validation
+    Validator->>Validator: AST safety validation
+    Validator->>Validator: Runtime execution
+    Validator->>Validator: Functional verification
+
+    alt Validation Successful
+        Validator-->>Orchestrator: validation_report.json (PASS)
+
+        Orchestrator->>MCP: Generate FastMCP server
+        MCP->>MCP: Build MCP package
+        MCP-->>Orchestrator: installable_package/
+
+        Orchestrator-->>User: MCP tool generated successfully
+    else Validation Failed
+        Validator-->>Orchestrator: validation_report.json (FAIL)
+        Orchestrator-->>User: Generation failed with diagnostics
+    end

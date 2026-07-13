@@ -1,0 +1,54 @@
+flowchart LR
+    %% External Actors
+    User([Developer / User])
+    Claude([Claude Desktop])
+    Website([Target Website])
+
+    %% BrowserBot Boundary
+    subgraph BrowserBot["BrowserBot (Local Machine)"]
+
+        Recorder["Recorder
+        (Playwright Recorder)"]
+
+        Orchestrator["Backend Orchestrator
+        Pipeline Coordinator"]
+
+        Extractor["Pattern Extractor Agent
+        (Claude API)"]
+
+        Generator["Code Generator Agent
+        (Claude API + Jinja2)"]
+
+        Validator["Validator Agent
+        (Schema + AST + Runtime)"]
+
+        MCP["Generated MCP Server
+        (FastMCP)"]
+    end
+
+    %% Recording Phase
+    User -->|Record Workflow| Recorder
+    Recorder -->|recording.json| Orchestrator
+
+    %% Generation Pipeline
+    Orchestrator -->|actions.json| Extractor
+    Extractor -->|workflow_schema.json| Orchestrator
+    Orchestrator -->|confirmed_schema.json| Generator
+    Generator -->|playwright_script.py| Orchestrator
+    Orchestrator -->|Generated Script| Validator
+    Validator -->|Validated MCP Package| MCP
+
+    %% Runtime Phase
+    Claude -->|Invoke Tool| MCP
+    MCP -->|Playwright Automation| Website
+    Website -->|Result| MCP
+    MCP -->|Structured Response| Claude
+
+    %% Styling
+    classDef actor fill:#f5f5f5,stroke:#333,stroke-width:1px;
+    classDef container fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px;
+    classDef external fill:#fde68a,stroke:#b45309,stroke-width:1.5px;
+
+    class User,Claude actor;
+    class Recorder,Orchestrator,Extractor,Generator,Validator,MCP container;
+    class Website external;

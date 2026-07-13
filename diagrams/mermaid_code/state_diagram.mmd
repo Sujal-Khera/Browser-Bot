@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+
+    actor User
+    participant Claude as Claude Desktop
+    participant MCP as Generated MCP Server
+    participant PW as Playwright Runtime
+    participant Site as Target Website
+
+    User->>Claude: Where is Order #12345?
+
+    Claude->>MCP: Invoke tool(order_id=12345)
+
+    MCP->>PW: Launch browser context
+    PW->>Site: Open login page
+    Site-->>PW: Login page
+
+    PW->>Site: Authenticate
+    Site-->>PW: Dashboard
+
+    PW->>Site: Enter Order ID
+    PW->>Site: Submit lookup
+
+    Site-->>PW: Shipment status page
+
+    PW->>PW: Extract structured data
+
+    PW-->>MCP: Return {status, carrier, expected_delivery}
+
+    MCP->>MCP: Format response
+
+    MCP-->>Claude: Structured tool response
+
+    Claude-->>User: Order #12345 shipped via FedEx. Expected delivery: July 14.

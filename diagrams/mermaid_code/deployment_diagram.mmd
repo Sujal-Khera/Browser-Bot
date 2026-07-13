@@ -1,0 +1,83 @@
+flowchart TB
+
+    subgraph UserMachine["Developer Machine (Windows / Linux / macOS)"]
+
+        subgraph ClaudeProcess["Claude Desktop Process"]
+            Claude["Claude Desktop"]
+        end
+
+        subgraph BrowserBot["BrowserBot Project"]
+
+            CLI["CLI / Future GUI"]
+
+            subgraph Venv["Python Virtual Environment"]
+
+                Orchestrator["Pipeline Orchestrator"]
+
+                Recorder["Recorder"]
+
+                Extractor["Pattern Extractor"]
+
+                Generator["Code Generator"]
+
+                Validator["Validator"]
+
+                Packager["Package Generator"]
+
+                Runtime["Generated MCP Server"]
+            end
+
+            subgraph Storage["Local Storage"]
+
+                Workflows["workflows/"]
+
+                Generated["generated/"]
+
+                Logs["logs/"]
+
+                Schemas["schemas/"]
+
+                Templates["templates/"]
+            end
+
+        end
+
+        Chromium["Chromium Browser"]
+
+        MCPInstall["~/.browserbot/tools/<tool_name>/"]
+    end
+
+    subgraph External["External Services"]
+
+        ClaudeAPI["Claude API"]
+
+        Website["Target Website"]
+
+    end
+
+    %% Generation Flow
+    CLI --> Orchestrator
+    Orchestrator --> Recorder
+    Orchestrator --> Extractor
+    Orchestrator --> Generator
+    Orchestrator --> Validator
+    Orchestrator --> Packager
+
+    %% Local Storage
+    Recorder --> Workflows
+    Extractor --> Schemas
+    Generator --> Generated
+    Validator --> Logs
+    Packager --> MCPInstall
+
+    %% Runtime
+    Claude --> Runtime
+    Runtime --> Chromium
+    Chromium --> Website
+    Website --> Chromium
+    Chromium --> Runtime
+    Runtime --> Claude
+
+    %% External Communication
+    Extractor -. LLM Request .-> ClaudeAPI
+    Generator -. LLM Request .-> ClaudeAPI

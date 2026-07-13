@@ -1,0 +1,33 @@
+stateDiagram-v2
+
+    [*] --> Idle
+
+    Idle --> Recording : Start Recording
+
+    Recording --> Stopped : Stop Recording
+    Recording --> Cancelled : Cancel
+
+    Stopped --> Normalizing : Parse Recording
+
+    Normalizing --> Extracting : Generate actions.json
+
+    Extracting --> ParameterReview : workflow_schema.json created
+
+    ParameterReview --> Generating : Parameters Approved
+    ParameterReview --> Extracting : User Edits Parameters
+
+    Generating --> Validating : Playwright Script Generated
+
+    Validating --> Packaging : Validation Passed
+    Validating --> Failed : Validation Failed
+
+    Packaging --> Installed : MCP Package Created
+    Packaging --> Failed : Packaging Error
+
+    Failed --> Extracting : Retry Extraction
+    Failed --> Generating : Retry Generation
+    Failed --> Validating : Retry Validation
+    Failed --> Packaging : Retry Packaging
+
+    Installed --> [*]
+    Cancelled --> [*]

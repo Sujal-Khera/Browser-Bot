@@ -1,0 +1,57 @@
+flowchart TD
+
+    %% External Entities
+    User([Developer / User])
+    Claude([Claude Desktop])
+    Website([Target Website])
+
+    %% Processes
+    P1([1. Record Workflow])
+    P2([2. Normalize Actions])
+    P3([3. Extract Workflow Pattern])
+    P4([4. Confirm Parameters])
+    P5([5. Generate Playwright Tool])
+    P6([6. Validate Generated Tool])
+    P7([7. Generate MCP Package])
+    P8([8. Runtime Execution])
+
+    %% Data Stores / Artifacts
+    D1[(recording.json)]
+    D2[(actions.json)]
+    D3[(workflow_schema.json)]
+    D4[(confirmed_schema.json)]
+    D5[(playwright_script.py)]
+    D6[(validation_report.json)]
+    D7[(mcp_server/)]
+    D8[(installable_package/)]
+
+    %% Recording Pipeline
+    User --> P1
+    P1 --> D1
+
+    D1 --> P2
+    P2 --> D2
+
+    D2 --> P3
+    P3 --> D3
+
+    D3 --> P4
+    User --> P4
+    P4 --> D4
+
+    D4 --> P5
+    P5 --> D5
+
+    D5 --> P6
+    P6 --> D6
+
+    D6 --> P7
+    P7 --> D7
+    P7 --> D8
+
+    %% Runtime
+    Claude --> P8
+    D8 --> P8
+    P8 --> Website
+    Website --> P8
+    P8 --> Claude

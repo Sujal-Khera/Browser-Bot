@@ -1,0 +1,1 @@
+"""BrowserBot test suite."""
