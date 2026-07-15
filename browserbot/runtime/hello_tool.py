@@ -40,7 +40,7 @@ Add to claude_desktop_config.json:
         "browserbot-hello": {
           "command": "python",
           "args": ["-m", "browserbot.runtime.hello_tool"],
-          "cwd": "/absolute/path/to/BrowserBot"
+          "cwd": "C:\\Users\\hp\OneDrive\Desktop\BrowserBot"
         }
       }
     }

@@ -113,9 +113,19 @@ class Settings:
         return self.project_root / "generated_tools"
 
     @property
+    def sessions_dir(self) -> Path:
+        """Directory where recorded session JSON files are saved."""
+        path = Path(
+            os.getenv("BROWSERBOT_SESSIONS_DIR", str(self.project_root / "workflows" / "sessions"))
+        )
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
     def logs_dir(self) -> Path:
         """Directory for structured JSON pipeline logs."""
         return self.project_root / "logs"
+
 
     # ------------------------------------------------------------------ #
     # Validation / retry
