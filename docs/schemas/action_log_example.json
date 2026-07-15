@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+
+  "metadata": {
+    "session_id": "session_20260715T143022",
+    "site": "nobuycart.com",
+    "start_url": "https://nobuycart.com/tracking/",
+    "recorded_at": "2026-07-15T14:30:22Z",
+    "browserbot_version": "0.1.0",
+    "duration_seconds": 7.41,
+    "step_count": 7,
+    "workflow_hint": "Fake order status lookup on NoBuyCart tracking simulator"
+  },
+
+  "steps": [
+    {
+      "step_index": 0,
+      "action": "goto",
+      "timestamp_offset": 0.00,
+      "url": "https://nobuycart.com/tracking/",
+      "wait_until": "networkidle",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 1,
+      "action": "wait",
+      "timestamp_offset": 1.12,
+      "wait_for": "selector",
+      "selector": {
+        "value": "label:has-text('Fake order code') input",
+        "strategy": "css"
+      },
+      "state": "visible",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 2,
+      "action": "fill",
+      "timestamp_offset": 1.54,
+      "selector": {
+        "value": "Fake order code",
+        "strategy": "label"
+      },
+      "value": "NBC-2026-8F3K2Q",
+      "is_sensitive": false,
+      "field_label": "Fake order code",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 3,
+      "action": "click",
+      "timestamp_offset": 2.31,
+      "selector": {
+        "value": "Show fake timeline",
+        "strategy": "role",
+        "aria_role": "button",
+        "aria_name": "Show fake timeline"
+      },
+      "button": "left",
+      "click_count": 1,
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 4,
+      "action": "wait",
+      "timestamp_offset": 2.38,
+      "wait_for": "selector",
+      "selector": {
+        "value": "li.status-card",
+        "strategy": "css"
+      },
+      "state": "visible",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 5,
+      "action": "extract_text",
+      "timestamp_offset": 2.95,
+      "selector": {
+        "value": "div.surface.overflow-hidden h2",
+        "strategy": "css"
+      },
+      "extracted_text": "NBC-2026-8F3K2Q",
+      "output_variable": "tracked_order_id",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    },
+    {
+      "step_index": 6,
+      "action": "extract_text",
+      "timestamp_offset": 3.02,
+      "selector": {
+        "value": "li.status-card h3",
+        "strategy": "css"
+      },
+      "extracted_text": "Fake order received\nPacked in the imaginary warehouse\nCourier picked it up emotionally\nPackage took a scenic route\nDelayed by fictional customs\nFinal status: happily never delivered",
+      "output_variable": "timeline_steps",
+      "frame_url": "https://nobuycart.com/tracking/",
+      "page_title": "Fake Delivery Tracker — Track a Package That Never Existed"
+    }
+  ]
+}
