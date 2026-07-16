@@ -391,8 +391,9 @@ def convert_codegen_script(
                 **base,
                 selector=selector,
                 value=parsed.kwargs["value"],
-                is_sensitive=False,  # PII scrubbing is Step 2.4, not implemented here
+                is_sensitive=False,  # is_sensitive is set by the scrubber (Step 2.4)
             )
+
 
         elif parsed.kind == "click":
             chain = _chain_to_locator(parsed.kwargs["chain"])

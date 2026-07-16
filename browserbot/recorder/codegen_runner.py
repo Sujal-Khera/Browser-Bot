@@ -35,12 +35,15 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
 from browserbot.config.settings import settings
 from browserbot.logging import get_logger
+from browserbot.models.action_log import ActionLogValidator
 from browserbot.recorder.convert_codegen import convert_codegen_file
+from browserbot.recorder.scrubber import scrub
 
 log = get_logger(__name__)
 
@@ -136,12 +139,20 @@ def run_recording_session(
         )
 
     if result.returncode != 0:
+        log.error(
+            "playwright codegen exited non-zero",
+            extra={"session_id": session_id, "returncode": result.returncode},
+        )
         raise RuntimeError(
             f"playwright codegen exited with code {result.returncode}. "
             f"Check the terminal output for details."
         )
 
     if not raw_script_path.exists() or raw_script_path.stat().st_size == 0:
+        log.error(
+            "Generated script missing or empty after codegen",
+            extra={"session_id": session_id, "path": str(raw_script_path)},
+        )
         raise RuntimeError(
             f"Expected generated script at {raw_script_path} but it is missing or empty.\n"
             "Did you close the browser before performing any actions?"
@@ -160,11 +171,10 @@ def run_recording_session(
     # Infer site from URL if provided
     site = ""
     if url:
-        import urllib.parse
         parsed = urllib.parse.urlparse(url)
         site = parsed.netloc or ""
 
-    # Convert the raw script to an ActionLog and write to disk
+    # Convert the raw script to an ActionLog
     action_log = convert_codegen_file(
         raw_script_path,
         site=site,
@@ -173,20 +183,47 @@ def run_recording_session(
         workflow_hint=workflow_hint,
     )
 
-    action_log.to_file(session_json_path)
+    # Scrub sensitive values — NOTHING reaches disk before this step
+    scrub_result = scrub(action_log)
+    if scrub_result.scrubbed_count > 0:
+        log.info(
+            "Sensitive fields redacted before disk write",
+            extra={
+                "session_id": session_id,
+                "scrubbed": scrub_result.scrubbed_count,
+                "secrets": scrub_result.secret_count,
+            },
+        )
+        print(
+            f"[BrowserBot Recorder] "
+            f"{scrub_result.scrubbed_count} sensitive field(s) redacted "
+            f"({scrub_result.secret_count} unique secret(s))."
+        )
+
+    # Re-validate after scrubbing — guarantees the file written to disk is always
+    # schema-valid, even if the scrubber changed is_sensitive flags.
+    scrubbed_log = scrub_result.action_log
+    assert scrubbed_log is not None  # always set by Scrubber.scrub()
+    _validator = ActionLogValidator()
+    _validator.assert_valid(
+        scrubbed_log.model_dump(mode="json", exclude_none=True),
+        label=f"{session_id} (post-scrub)",
+    )
+
+    scrubbed_log.to_file(session_json_path)
 
     log.info(
         "Session saved",
         extra={
             "session_id": session_id,
-            "steps": len(action_log.steps),
+            "steps": len(scrubbed_log.steps),
             "path": str(session_json_path),
         },
     )
 
     print(f"[BrowserBot Recorder] Session saved:")
     print(f"  JSON : {session_json_path}")
-    print(f"  Steps: {len(action_log.steps)}")
+    print(f"  Steps: {len(scrubbed_log.steps)}")
     print(f"  Raw  : {raw_script_path}")
     print()
 
