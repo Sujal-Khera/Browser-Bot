@@ -81,6 +81,19 @@ class Settings:
         """Groq model identifier (OpenAI-compatible endpoint)."""
         return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+    @property
+    def llm_max_retries(self) -> int:
+        """
+        Maximum number of LLM retries when the model produces malformed or
+        schema-invalid output.  Applies to all LLM agents (Pattern Extractor,
+        Code Generator, etc.).
+
+        Higher values improve resilience against occasional model drift but
+        increase latency on failure paths.  2–3 retries is a good default for
+        llama3.1:8b; frontier models typically need 0–1.
+        """
+        return int(os.getenv("BROWSERBOT_LLM_MAX_RETRIES", "3"))
+
     # ------------------------------------------------------------------ #
     # Playwright / browser
     # ------------------------------------------------------------------ #

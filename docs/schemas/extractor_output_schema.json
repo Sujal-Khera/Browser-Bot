@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browserbot.local/schemas/extractor_output/v1.json",
+  "title": "BrowserBot Pattern Extractor Output",
+  "description": "Structured output produced by the Pattern Extractor agent (Phase 3). Contains identified dynamic parameters and the set of fixed step indices. Consumed by the Parameter Confirmation step (3.2) and then by the Code Generator (Phase 4).",
+  "type": "object",
+
+  "required": ["parameters", "fixed_step_indices"],
+  "additionalProperties": false,
+
+  "properties": {
+
+    "parameters": {
+      "type": "array",
+      "description": "List of dynamic parameters the LLM identified in the action log. May be empty if the workflow has no variable inputs.",
+      "items": {
+        "$ref": "#/$defs/Parameter"
+      }
+    },
+
+    "fixed_step_indices": {
+      "type": "array",
+      "description": "Indices of steps that are structural/fixed (e.g. goto, click submit, wait for result). The LLM lists these explicitly so the Code Generator knows which steps are not parameterised.",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+
+    "workflow_description": {
+      "type": "string",
+      "description": "Optional one-sentence description of what the workflow does. Used as documentation in generated code. Should NOT mention Playwright or BrowserBot internals — only the user-visible action."
+    }
+  },
+
+  "$defs": {
+
+    "Parameter": {
+      "type": "object",
+      "description": "A single dynamic parameter identified by the Pattern Extractor.",
+      "required": ["name", "example_value", "log_step_index"],
+      "additionalProperties": false,
+      "properties": {
+
+        "name": {
+          "type": "string",
+          "description": "Snake_case parameter name. Should be descriptive and match the semantic meaning of the input (e.g. 'order_id', 'zip_code', 'username').",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "examples": ["order_id", "zip_code", "tracking_number"]
+        },
+
+        "example_value": {
+          "type": "string",
+          "description": "The actual value used during the recording session. Used as a default/example in the generated tool schema. May be a placeholder (e.g. __SECRET_1__) for scrubbed sensitive fields.",
+          "examples": ["NBC-2026-8F3K2Q", "10001", "__SECRET_1__"]
+        },
+
+        "log_step_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The step_index in the Action Log where this parameter was used. The Code Generator uses this to map the parameter name to the correct Playwright call."
+        },
+
+        "description": {
+          "type": "string",
+          "description": "Optional human-readable description of what this parameter represents. Used as the parameter description in the generated FastMCP tool schema."
+        },
+
+        "is_sensitive": {
+          "type": "boolean",
+          "description": "True if the example_value is a scrubbed placeholder (e.g. __SECRET_1__). When true, the generated tool should treat this as a secret/password parameter.",
+          "default": false
+        }
+      }
+    }
+  }
+}
