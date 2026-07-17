@@ -82,7 +82,7 @@ class Packager:
         # 5. Build Claude configuration snippet
         target_server = output_dir / "server.py"
         snippet = ClaudeConfigSnippet(
-            command="python",
+            command=sys.executable,
             args=[str(target_server)],
             env={"BROWSERBOT_HEADLESS": "true"},
         )
@@ -175,7 +175,7 @@ class Packager:
             loaded = json.loads(config_str)
             # Verify integration content
             injected_mcp = loaded["mcpServers"][pkg.package_name]
-            assert injected_mcp["command"] == "python"
+            assert Path(injected_mcp["command"]).stem in ("python", "pythonw")
             assert len(injected_mcp["args"]) == 1
             assert Path(injected_mcp["args"][0]).name == "server.py"
         except Exception as exc:

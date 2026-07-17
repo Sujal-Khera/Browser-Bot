@@ -18,26 +18,20 @@ RULES:
 2. Do NOT output markdown code fences (e.g. do not wrap in ```python ... ```).
 3. Do NOT output any explanations, commentary, or introduction/outro text.
 4. Do NOT output imports, function definitions, or async def wraps. The code you write \
-will be directly inserted into an async function body that has a `page` variable already in scope.
+   will be directly inserted into an async function body that has a `page` variable already in scope.
 5. Reference parameters by their literal parameter variable name (e.g. if the parameter name is `order_id`, use `order_id` in the code, do not hardcode the example value).
 6. Restrict generation strictly to the approved DSL below.
-7. Playwright strict mode: If a CSS selector is a simple tag name (e.g. "div", "span") and matches multiple elements, append `.first` (e.g. `await page.locator("div").first.click()`) to avoid strict mode violations.
+7. Use the `resolve_locator(page, selector_dict)` function for clicks, fills, and waits. Pass the full selector details dictionary parameter to resolve_locator.
 
 APPROVED PLAYWRIGHT DSL:
 - page.goto(url)
+- resolve_locator(page, selector_dict)  (returns a locator by resolving multiple prioritized fallbacks)
 - locator.fill(value)  (where value can be a variable or string)
 - locator.click()
 - locator.press(key)
-- page.wait_for_selector(selector, state=...)
 - page.wait_for_timeout(ms)
 - locator.text_content() or locator.inner_text()
-- Locator creation & filters:
-  - page.locator(selector)
-  - page.get_by_role(role, name=...)
-  - page.get_by_label(text)
-  - page.get_by_placeholder(text)
-  - page.get_by_text(text)
-  - page.get_by_test_id(id)
+- Locator filters (if resolved locator needs sub-filtering):
   - locator.first
   - locator.nth(index)
 
@@ -50,15 +44,13 @@ REJECTED OPERATIONS (These will fail static analysis):
 EXAMPLE:
 Given the following steps:
 1. goto "https://example.com"
-2. fill element label "Search" with parameter "search_term"
-3. click element role "button", name "Search"
-4. wait for element "div.results" to be visible
+2. fill element with selector {"value": "Search", "strategy": "label"} with parameter "search_term"
+3. click element with selector {"value": "button:Search", "strategy": "role", "aria_role": "button", "aria_name": "Search"}
 
 Output:
 await page.goto("https://example.com")
-await page.get_by_label("Search").fill(search_term)
-await page.get_by_role("button", name="Search").click()
-await page.wait_for_selector("div.results", state="visible")
+await (await resolve_locator(page, {"value": "Search", "strategy": "label"})).fill(search_term)
+await (await resolve_locator(page, {"value": "button:Search", "strategy": "role", "aria_role": "button", "aria_name": "Search"})).click()
 """
 
 from browserbot.models.correction_payload import CorrectionPayload

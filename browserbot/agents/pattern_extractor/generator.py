@@ -69,11 +69,20 @@ def generate_workflow_spec(
     parameters: list[IRParameter] = []
     # Index parameters by log_step_index for fast lookup during step compilation
     param_map: dict[int, str] = {}
+    seen_names: dict[str, bool] = {}
 
     for param in confirmed.parameters:
+        base_name = param.name
+        name = base_name
+        counter = 2
+        while name in seen_names:
+            name = f"{base_name}_{counter}"
+            counter += 1
+        seen_names[name] = True
+
         parameters.append(
             IRParameter(
-                name=param.name,
+                name=name,
                 example_value=param.example_value,
                 log_step_index=param.log_step_index,
                 description=param.description,
@@ -81,7 +90,7 @@ def generate_workflow_spec(
                 is_optional=param.is_optional,
             )
         )
-        param_map[param.log_step_index] = param.name
+        param_map[param.log_step_index] = name
 
     # 4. Map steps and parameter references
     spec_steps: list[dict[str, Any]] = []

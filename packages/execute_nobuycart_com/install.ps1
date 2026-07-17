@@ -5,7 +5,7 @@ $configSnippet = @'
 {
   "mcpServers": {
     "execute_nobuycart_com": {
-      "command": "python",
+      "command": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\.venv\\Scripts\\python.exe",
       "args": [
         "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\packages\\execute_nobuycart_com\\server.py"
       ],

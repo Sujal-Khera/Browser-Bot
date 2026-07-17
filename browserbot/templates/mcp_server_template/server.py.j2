@@ -7,6 +7,7 @@ from playwright.async_api import async_playwright
 
 from browserbot.logging import get_logger
 from browserbot.runtime.result_formatter import format_success, format_error
+from browserbot.runtime.resilience import resolve_locator
 
 log = get_logger("browserbot.runtime.generated_tool")
 
@@ -56,10 +57,9 @@ async def run_workflow(
             extracted_outputs = {}
             {% for out in outputs %}
             try:
-                # Extract using the selector details defined in IR
-                # Using wait_for_selector first to handle page loads/transitions
-                await page.wait_for_selector("{{ out.selector.value }}", timeout=5000)
-                val = await page.locator("{{ out.selector.value }}").inner_text()
+                # Extract using the selector details defined in IR with resilient fallbacks
+                loc = await resolve_locator(page, {{ out.selector }}, timeout_ms=5000)
+                val = await loc.inner_text()
                 extracted_outputs["{{ out.name }}"] = val.strip()
                 log.info("Extracted output", extra={"name": "{{ out.name }}", "length": len(val)})
             except Exception as ext_err:

@@ -86,6 +86,7 @@ class DSLSecurityVisitor(ast.NodeVisitor):
         self.allowed_variables = allowed_variables or set()
         # Always allow 'page' as the entry point
         self.allowed_variables.add("page")
+        self.allowed_variables.add("resolve_locator")
         self.errors: list[str] = []
 
     def visit_Import(self, node: ast.Import) -> None:

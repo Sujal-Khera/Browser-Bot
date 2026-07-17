@@ -43,6 +43,20 @@ def _claude_config_path() -> Path:
     """Return the platform-appropriate Claude Desktop config file path."""
     system = platform.system()
     if system == "Windows":
+        # Check for Windows Store installation path redirection
+        packages_dir = Path.home() / "AppData" / "Local" / "Packages"
+        if packages_dir.exists():
+            try:
+                for folder in packages_dir.iterdir():
+                    if folder.name.lower().startswith("claude_"):
+                        store_path = folder / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                        # If this store config directory exists, prioritize it
+                        if store_path.parent.exists():
+                            return store_path
+            except Exception as exc:
+                log.warning("Failed to iterate Windows packages dir", extra={"error": str(exc)})
+        
+        # Standard AppData fallback
         appdata = os.environ.get("APPDATA", "")
         return Path(appdata) / "Claude" / "claude_desktop_config.json"
     elif system == "Darwin":
@@ -128,7 +142,7 @@ class ClaudeDesktopRegistry:
 
         action = "updated" if already_registered else "registered"
         print(
-            f"\n✅ Tool '{tool_name}' {action} in Claude Desktop.\n"
+            f"\n[BrowserBot] Tool '{tool_name}' {action} in Claude Desktop.\n"
             f"   Config: {self.config_path}\n"
             f"\n   Restart Claude Desktop for the change to take effect.\n"
         )
@@ -161,7 +175,7 @@ class ClaudeDesktopRegistry:
 
         self._backup_config()
         self._write_config(existing)
-        print(f"\n✅ Tool '{tool_name}' removed from Claude Desktop config.\n")
+        print(f"\n[BrowserBot] Tool '{tool_name}' removed from Claude Desktop config.\n")
         return True
 
     def list_registered(self) -> list[str]:

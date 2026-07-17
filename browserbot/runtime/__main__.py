@@ -59,10 +59,10 @@ def _cmd_register(args: argparse.Namespace) -> int:
     if not args.dry_run:
         # Print a concise invocation hint
         print(
-            f"\n── Invocation hint ──────────────────────────────────────────\n"
+            f"\n--- Invocation hint ------------------------------------------\n"
             f"   Ask Claude Desktop (after restart):\n"
             f"   \"Check my order status for order code NBC-2026-E3ZXJC\"\n"
-            f"─────────────────────────────────────────────────────────────\n"
+            f"-------------------------------------------------------------\n"
         )
 
     return 0

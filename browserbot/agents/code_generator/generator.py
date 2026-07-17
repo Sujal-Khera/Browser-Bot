@@ -77,58 +77,19 @@ def _build_dry_run_body(spec: WorkflowSpec) -> str:
 
         elif action == "click":
             sel = step.get("selector", {})
-            val = sel.get("value", "")
-            strat = sel.get("strategy")
-            
-            if strat == "role":
-                role = sel.get("aria_role", "button")
-                name = sel.get("aria_name", "")
-                lines.append(f'await page.get_by_role("{role}", name="{name}").click()')
-            elif strat == "label":
-                lines.append(f'await page.get_by_label("{val}").click()')
-            elif strat == "placeholder":
-                lines.append(f'await page.get_by_placeholder("{val}").click()')
-            elif strat == "text":
-                lines.append(f'await page.get_by_text("{val}").click()')
-            elif strat == "test_id":
-                lines.append(f'await page.get_by_test_id("{val}").click()')
-            else:
-                if re.match(r"^[a-zA-Z]+$", val):
-                    lines.append(f'await page.locator("{val}").first.click()')
-                else:
-                    lines.append(f'await page.locator("{val}").click()')
+            lines.append(f'await (await resolve_locator(page, {repr(sel)})).click()')
 
         elif action == "fill":
             sel = step.get("selector", {})
-            val = sel.get("value", "")
-            strat = sel.get("strategy")
-            
             # Use parameter variable name or fallback to hardcoded value
             fill_value = param_var if param_var else f'"{step.get("value", "")}"'
-
-            if strat == "role":
-                role = sel.get("aria_role", "textbox")
-                name = sel.get("aria_name", "")
-                lines.append(f'await page.get_by_role("{role}", name="{name}").fill({fill_value})')
-            elif strat == "label":
-                lines.append(f'await page.get_by_label("{val}").fill({fill_value})')
-            elif strat == "placeholder":
-                lines.append(f'await page.get_by_placeholder("{val}").fill({fill_value})')
-            elif strat == "test_id":
-                lines.append(f'await page.get_by_test_id("{val}").fill({fill_value})')
-            else:
-                if re.match(r"^[a-zA-Z]+$", val):
-                    lines.append(f'await page.locator("{val}").first.fill({fill_value})')
-                else:
-                    lines.append(f'await page.locator("{val}").fill({fill_value})')
+            lines.append(f'await (await resolve_locator(page, {repr(sel)})).fill({fill_value})')
 
         elif action == "wait":
             wait_for = step.get("wait_for")
             if wait_for == "selector":
                 sel = step.get("selector", {})
-                val = sel.get("value", "")
-                state = step.get("state", "visible")
-                lines.append(f'await page.wait_for_selector("{val}", state="{state}")')
+                lines.append(f'await resolve_locator(page, {repr(sel)})')
             elif wait_for == "network_idle":
                 # Wait for network idle state
                 lines.append('await page.wait_for_load_state("networkidle")')
@@ -139,9 +100,8 @@ def _build_dry_run_body(spec: WorkflowSpec) -> str:
             # Extraction is structural/fixed and handled by output block in the template,
             # but we can wait for the element here.
             sel = step.get("selector", {})
-            val = sel.get("value", "")
-            if val:
-                lines.append(f'await page.wait_for_selector("{val}", state="visible")')
+            if sel:
+                lines.append(f'await resolve_locator(page, {repr(sel)})')
 
     return "\n".join(lines)
 

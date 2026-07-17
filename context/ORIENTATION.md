@@ -549,3 +549,131 @@ python -m pytest tests/ -v   # 89 passed
 ---
 
 *Last updated: run_13 — 2026-07-17*
+
+---
+
+## 14. Phase 7A — End-to-End Validation (run_14)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_integration.py -v` and confirm all `3 passed` | Validates that the entire sequential compilation and registration pipeline completes without errors under dry-run conditions. |
+| B | Run the full suite: `python -m pytest tests/ -v` | Confirms that all 92 tests are green, proving no regression was introduced. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| C | **Orchestration Pipeline Role** | `browserbot/orchestrator/pipeline.py` | Orchestration acts as the central coordinator, chaining all existing subsystem modules sequentially. It is programmatic, deterministic, and will act as the backend API wrapper for the Phase 7B UI. |
+| D | **Hermetic Testing** | `tests/test_integration.py` | The tests mock the Playwright browser dry-run harness to prevent external internet/website dependency, ensuring 100% offline reliability in all development environments. |
+
+### Manual Verification Steps
+
+1. Start with a raw recorded session:
+   ```powershell
+   python -m browserbot.recorder start https://nobuycart.com/tracking/
+   ```
+2. Manually run the pipeline orchestrator end-to-end to generate, validate, package, and register the tool:
+   - Programmatically run the pipeline from Python:
+     ```python
+     from pathlib import Path
+     from browserbot.orchestrator import OrchestrationPipeline
+     
+     pipeline = OrchestrationPipeline(dry_run=True)
+     pipeline.run(
+         raw_action_log_path="workflows/sessions/session_TIMESTAMP.json",
+         output_dir="generated_tools/nobuycart_tracker",
+         package_dir="packages/execute_nobuycart_com",
+         register=True
+     )
+     ```
+3. Restart Claude Desktop and verify the tool is registered and callable.
+
+### Known Limitations & Debugging Tips
+
+* **Windows Store Path redirection**: If Claude Desktop still doesn't see your tool, verify the registry is outputting `Config: ...\Claude_...\LocalCache\Roaming\...`. The registry supports this, but make sure your Windows Store installation folder matches the naming style.
+* **Orchestration exception traces**: If the pipeline fails, inspect the `PipelineOrchestrationError` message. It specifies exactly which stage (Stage 1 to 7) triggered the failure, making troubleshooting straightforward.
+* **Duplicate Parameter Names Bug Fixed**: If your recorded session targets identical fields or generates duplicate parameter name recommendations, the generator now automatically de-duplicates them (e.g. `textbox_fake_order_code` and `textbox_fake_order_code_2`) to prevent Python function definition `SyntaxErrors`.
+
+*Last updated: run_14 — 2026-07-17*
+
+## 15. Phase 7B — Production Readiness (run_15)
+
+This run hardens BrowserBot through regression validation, determinism protection, structured diagnostics, and exception handling improvements.
+
+### Things You Must Verify Manually
+
+* **Verification of `pipeline_diagnostics.json`**: After running the orchestrator pipeline (e.g., via `python run_sample.py`), navigate to the generated output directory (`generated_tools/nobuycart_tracker/`) and confirm `pipeline_diagnostics.json` exists. Open it and verify all 7 stages show `success: true` and no errors.
+* **Diagnostics under Failure States**: Deliberately insert an invalid file path or cause validation to fail, run the pipeline, and verify the diagnostics file is written with the active stage marked as failed, alongside the exact exception description.
+
+### Things You Must Understand
+
+* **Diagnostics Observability**: The `pipeline_diagnostics.json` report acts as a single point of telemetry for the entire pipeline, logging metadata, timing, and error traces. This enables user interface layers and wrapper processes to inspect compilation status without reading logs directly.
+* **Strict Determinism**: End-to-end execution must remain 100% deterministic. Running the compilation process repeatedly over the same session log produces identical AST outputs, requirements declarations, and package metadata (excluding execution timestamps).
+
+### Manual Tasks
+
+1. To run full regression and integration tests to verify production readiness:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+2. Verify happy-path compilation, packaging, and automatic Claude Desktop integration:
+   ```powershell
+   .venv\Scripts\python.exe run_sample.py
+   ```
+
+### Architecture Notes
+
+* **Telemetry Output**: Telemetry details are recorded inside the `OrchestrationPipeline.run()` execution flow. The stages dictionary tracks step transitions non-destructively, persisting to disk under `output_dir / "pipeline_diagnostics.json"`.
+
+### Command Reference
+
+* **Test execution**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+* **Workflow run**: `.venv\Scripts\python.exe run_sample.py`
+
+---
+
+*Last updated: run_15 — 2026-07-17*
+
+## 16. Phase 8A — Selector Resilience (run_16)
+
+This run implements Phase 8A selector resilience by introducing dynamic prioritized fallback locator resolution.
+
+### Things You Must Verify Manually
+
+* **Verification of Resilience Logging**: Run a workflow (e.g. `python run_sample.py`) and inspect the terminal output or output logs. Confirm you see:
+  `Resolving locator with prioritized fallbacks` followed by `Locator resolved successfully`.
+* **Playwright Native Failure Propagation**: Deliberately run the tool on an empty/wrong page or selector that doesn't exist under any candidate variant, and confirm the tool exits with standard Playwright timeout exceptions rather than a silent failure.
+
+### Things You Must Understand
+
+* **Prioritised Fallback Ordering**: The dynamic resolver compiles locator candidates deterministically: ARIA Role -> Label -> Placeholder -> Test ID -> Text -> Raw Selector. It searches for these in order and matches on the first one present on the page.
+* **DSL Safety Preservation**: The resolver lives in `browserbot.runtime.resilience`. Whitelisting `resolve_locator` in the validator allows compiler statements like `await (await resolve_locator(page, selector)).click()` to validate and compile successfully, while fully preserving the security restrictions on arbitrary Python execution.
+
+### Manual Tasks
+
+1. Run the resilience unit tests:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/test_resilience.py -v
+   ```
+2. Run the complete regression test suite:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+
+### Architecture Notes
+
+* **resilience.py**: The resolver helper `resolve_locator` polls each candidate locator at `100ms` intervals. If no match is found before the timeout, it yields the first candidate to defer matching errors to Playwright.
+
+### Command Reference
+
+* **Resilience tests**: `.venv\Scripts\python.exe -m pytest tests/test_resilience.py -v`
+* **All tests**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+
+---
+
+*Last updated: run_16 — 2026-07-17*
+
+
+

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-07-16T18:47:22.590261+00:00",
+  "generated_at": "2026-07-17T15:35:19.871511+00:00",
   "tool_dir": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\generated_tools\\nobuycart_tracker",
   "overall_success": true,
   "file_existence": {
@@ -25,10 +25,11 @@
     "success": true,
     "message": "Dry-run and outputs validation successful.",
     "details": {
-      "duration_seconds": 4.7967288999998345,
+      "duration_seconds": 2.716384700001072,
       "stdout": "",
       "stderr": "",
-      "exception": null
+      "exception": null,
+      "output_length": 59
     }
   }
 }
