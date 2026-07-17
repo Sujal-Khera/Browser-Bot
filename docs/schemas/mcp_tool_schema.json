@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browserbot.local/schemas/mcp_tool/v1.json",
+  "title": "BrowserBot MCP Tool Manifest Schema",
+  "description": "Defines the schema for the auto-generated tool manifest file (mcp_tool.json). Used by clients to dynamically register and invoke the tool.",
+  "type": "object",
+
+  "required": [
+    "schema_version",
+    "mcp_tool_name",
+    "description",
+    "parameters_schema",
+    "metadata"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version of the manifest. Fixed at '1.0'.",
+      "const": "1.0"
+    },
+
+    "mcp_tool_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The exact name used for FastMCP tool registration."
+    },
+
+    "description": {
+      "type": "string",
+      "description": "A clear, descriptive summary of what this browser tool accomplishes, read by the LLM client (e.g. Claude) to choose the tool."
+    },
+
+    "parameters_schema": {
+      "type": "object",
+      "description": "The JSON schema describing parameter arguments expected by the tool function.",
+      "required": [
+        "type",
+        "properties"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["type", "description", "default"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "description": { "type": "string" },
+              "default": { "type": "string" },
+              "is_sensitive": { "type": "boolean" }
+            }
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Provenances and generation environment info.",
+      "required": [
+        "browserbot_version",
+        "generated_at",
+        "source_session_id",
+        "site"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "browserbot_version": {
+          "type": "string",
+          "description": "The version of BrowserBot that built this tool."
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of tool manifest generation."
+        },
+        "source_session_id": {
+          "type": "string",
+          "description": "The ID of the session that recorded the source Action Log."
+        },
+        "site": {
+          "type": "string",
+          "description": "The domain name of the target site."
+        }
+      }
+    }
+  }
+}

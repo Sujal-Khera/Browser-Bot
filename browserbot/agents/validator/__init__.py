@@ -1,8 +1,16 @@
 """
-browserbot.agents.validator — Phase 5.
+browserbot/agents/validator — Phase 5: Verification & Dry-Run.
 
-Runs the generated Playwright script in a headless dry-run, validates JSON
-schema, performs AST allow-list checks, and emits validation_report.json.
+Public API:
 
-Implementation deferred to Phase 5.
+    from browserbot.agents.validator import DryRunHarness, ValidationPipeline
 """
+
+from browserbot.agents.validator.harness import DryRunHarness, DryRunResult
+from browserbot.agents.validator.pipeline import ValidationPipeline
+
+__all__ = [
+    "DryRunHarness",
+    "DryRunResult",
+    "ValidationPipeline",
+]

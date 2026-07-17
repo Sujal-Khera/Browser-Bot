@@ -56,6 +56,7 @@ class ExtractedParameter(BaseModel):
     log_step_index: int
     description: str | None = None
     is_sensitive: bool = False
+    is_optional: bool = False
 
     model_config = {"frozen": True}
 

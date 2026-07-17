@@ -1,0 +1,24 @@
+{
+  "package_version": "1.0",
+  "package_name": "execute_nobuycart_com",
+  "entry_point": "server.py",
+  "dependencies": [
+    "fastmcp>=3.0.0",
+    "playwright>=1.40.0"
+  ],
+  "claude_config_snippet": {
+    "command": "python",
+    "args": [
+      "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\packages\\execute_nobuycart_com\\server.py"
+    ],
+    "env": {
+      "BROWSERBOT_HEADLESS": "true"
+    }
+  },
+  "metadata": {
+    "browserbot_version": "0.1.0",
+    "generated_at": "2026-07-16T18:51:55.699322+00:00",
+    "source_session_id": "session_20260716T140748",
+    "site": "nobuycart.com"
+  }
+}

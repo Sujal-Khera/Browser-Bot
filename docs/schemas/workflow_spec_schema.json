@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browserbot.local/schemas/workflow_spec/v1.json",
+  "title": "BrowserBot Workflow Spec Schema",
+  "description": "Defines the schema for the Intermediate Representation (IR) of a parameterized browser workflow. Consumed by Phase 4 Code Generator.",
+  "type": "object",
+
+  "required": [
+    "schema_version",
+    "metadata",
+    "workflow",
+    "steps",
+    "parameters",
+    "fixed_step_indices",
+    "outputs"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Version of the workflow spec schema. Fixed at '1.0' for backwards compatibility.",
+      "const": "1.0"
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Metadata about the generation process and provenance.",
+      "required": [
+        "generator_version",
+        "created_at",
+        "source_session_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "generator_version": {
+          "type": "string",
+          "description": "The version of BrowserBot that generated this spec."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when this spec was generated."
+        },
+        "source_session_id": {
+          "type": "string",
+          "description": "The session ID of the Action Log from which this spec was derived."
+        }
+      }
+    },
+
+    "workflow": {
+      "type": "object",
+      "description": "High-level logical information about the workflow.",
+      "required": [
+        "site",
+        "start_url",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "site": {
+          "type": "string",
+          "description": "The primary domain name where the workflow occurs."
+        },
+        "start_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The initial URL loaded to start the workflow."
+        },
+        "description": {
+          "type": "string",
+          "description": "A clear, single-sentence description of the workflow's purpose."
+        }
+      }
+    },
+
+    "steps": {
+      "type": "array",
+      "description": "The ordered sequence of steps to execute the workflow. These are identical to Action Log steps but may include parameter mapping.",
+      "items": {
+        "type": "object",
+        "required": ["step_index", "action", "timestamp_offset"],
+        "properties": {
+          "step_index": { "type": "integer", "minimum": 0 },
+          "action": { "type": "string" },
+          "timestamp_offset": { "type": "number", "minimum": 0.0 },
+          "parameter_name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "If this step is parameterised, this points to the name of the parameter in the parameters list."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+
+    "parameters": {
+      "type": "array",
+      "description": "The confirmed input parameters required to run this workflow.",
+      "items": {
+        "$ref": "#/$defs/IRParameter"
+      }
+    },
+
+    "fixed_step_indices": {
+      "type": "array",
+      "description": "Indices of steps that remain structural and use static values.",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+
+    "outputs": {
+      "type": "array",
+      "description": "Data extracted from the page during workflow execution.",
+      "items": {
+        "$ref": "#/$defs/IROutput"
+      }
+    }
+  },
+
+  "$defs": {
+    "IRParameter": {
+      "type": "object",
+      "required": [
+        "name",
+        "example_value",
+        "log_step_index",
+        "is_sensitive",
+        "is_optional"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Parameter name in lowercase snake_case."
+        },
+        "example_value": {
+          "type": "string",
+          "description": "The static value used in the recording, used as an example/default."
+        },
+        "log_step_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The step_index in the workflow steps where this parameter is bound."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this parameter."
+        },
+        "is_sensitive": {
+          "type": "boolean",
+          "description": "Whether this parameter contains credentials/secrets and should be redacted/masked."
+        },
+        "is_optional": {
+          "type": "boolean",
+          "description": "Whether this parameter is optional (e.g. falls back to blank or a default value if missing)."
+        }
+      }
+    },
+
+    "IROutput": {
+      "type": "object",
+      "required": [
+        "name",
+        "log_step_index",
+        "selector"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The output variable name in lowercase snake_case."
+        },
+        "log_step_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The step_index where this output is extracted."
+        },
+        "selector": {
+          "type": "object",
+          "required": ["value", "strategy"],
+          "properties": {
+            "value": { "type": "string" },
+            "strategy": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this extracted text represents."
+        }
+      }
+    }
+  }
+}

@@ -30,6 +30,7 @@ from pathlib import Path
 
 from browserbot.agents.pattern_extractor.confirmer import confirm_parameters
 from browserbot.agents.pattern_extractor.extractor import ExtractionError, PatternExtractor
+from browserbot.agents.pattern_extractor.generator import generate_workflow_spec
 from browserbot.logging import get_logger
 from browserbot.models.action_log import ActionLog
 
@@ -81,6 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Maximum number of LLM retries on malformed output (default: from settings).",
+    )
+    p.add_argument(
+        "--output",
+        type=Path,
+        default=Path("workflow_spec.json"),
+        help="Path where the generated workflow_spec.json should be written. Defaults to workflow_spec.json in current directory.",
     )
     return p
 
@@ -148,6 +155,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.output_json:
         output_data = confirmed.to_extractor_output().model_dump(mode="json", exclude_none=True)
         print(json.dumps(output_data, indent=2))
+
+    # ---- Compile to WorkflowSpec (Step 3.4) ----
+    try:
+        spec = generate_workflow_spec(action_log, confirmed)
+        spec.to_file(args.output)
+        print(f"\n[BrowserBot] Persisted confirmed workflow spec to: {args.output}")
+    except Exception as exc:
+        print(f"[error] Failed to generate/write workflow spec: {exc}", file=sys.stderr)
+        return 1
 
     print("\n[BrowserBot] Done. Confirmed output ready for Phase 4 (Code Generator).")
     return 0

@@ -70,6 +70,11 @@
           "type": "boolean",
           "description": "True if the example_value is a scrubbed placeholder (e.g. __SECRET_1__). When true, the generated tool should treat this as a secret/password parameter.",
           "default": false
+        },
+        "is_optional": {
+          "type": "boolean",
+          "description": "True if this parameter is optional.",
+          "default": false
         }
       }
     }

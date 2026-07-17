@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "session_id": "session_multi_params_20260716T120000",
+    "site": "example.com",
+    "start_url": "https://example.com/signup",
+    "recorded_at": "2026-07-16T12:00:00Z",
+    "browserbot_version": "0.1.0",
+    "duration_seconds": 4.0,
+    "step_count": 5,
+    "workflow_hint": "Create an account with username, password, confirm password, and referral code"
+  },
+  "steps": [
+    {
+      "step_index": 0,
+      "action": "goto",
+      "timestamp_offset": 0.0,
+      "url": "https://example.com/signup",
+      "wait_until": "networkidle"
+    },
+    {
+      "step_index": 1,
+      "action": "fill",
+      "timestamp_offset": 1.0,
+      "selector": {
+        "value": "Username",
+        "strategy": "label"
+      },
+      "value": "alice",
+      "is_sensitive": false,
+      "field_label": "Username"
+    },
+    {
+      "step_index": 2,
+      "action": "fill",
+      "timestamp_offset": 2.0,
+      "selector": {
+        "value": "Password",
+        "strategy": "label"
+      },
+      "value": "__SECRET_1__",
+      "is_sensitive": true,
+      "field_label": "Password"
+    },
+    {
+      "step_index": 3,
+      "action": "fill",
+      "timestamp_offset": 3.0,
+      "selector": {
+        "value": "Confirm Password",
+        "strategy": "label"
+      },
+      "value": "__SECRET_1__",
+      "is_sensitive": true,
+      "field_label": "Confirm Password"
+    },
+    {
+      "step_index": 4,
+      "action": "fill",
+      "timestamp_offset": 4.0,
+      "selector": {
+        "value": "Referral Code",
+        "strategy": "label"
+      },
+      "value": "REF123",
+      "is_sensitive": false,
+      "field_label": "Referral Code"
+    }
+  ]
+}

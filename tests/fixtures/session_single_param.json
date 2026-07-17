@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "session_id": "session_single_param_20260716T120000",
+    "site": "example.com",
+    "start_url": "https://example.com/search",
+    "recorded_at": "2026-07-16T12:00:00Z",
+    "browserbot_version": "0.1.0",
+    "duration_seconds": 2.0,
+    "step_count": 3,
+    "workflow_hint": "Search for a query"
+  },
+  "steps": [
+    {
+      "step_index": 0,
+      "action": "goto",
+      "timestamp_offset": 0.0,
+      "url": "https://example.com/search",
+      "wait_until": "networkidle"
+    },
+    {
+      "step_index": 1,
+      "action": "fill",
+      "timestamp_offset": 1.0,
+      "selector": {
+        "value": "Search input",
+        "strategy": "label"
+      },
+      "value": "learning agents",
+      "is_sensitive": false,
+      "field_label": "Search input"
+    },
+    {
+      "step_index": 2,
+      "action": "click",
+      "timestamp_offset": 2.0,
+      "selector": {
+        "value": "Search button",
+        "strategy": "label"
+      }
+    }
+  ]
+}

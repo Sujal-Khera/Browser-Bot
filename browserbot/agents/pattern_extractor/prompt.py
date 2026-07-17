@@ -90,6 +90,7 @@ def _load_output_schema_excerpt() -> str:
                         "log_step_index": {"type": "integer", "minimum": 0},
                         "description": {"type": "string"},
                         "is_sensitive": {"type": "boolean"},
+                        "is_optional": {"type": "boolean"},
                     },
                 },
             },

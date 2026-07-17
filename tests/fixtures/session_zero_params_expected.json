@@ -1,0 +1,5 @@
+{
+  "parameters": [],
+  "fixed_step_indices": [0, 1],
+  "workflow_description": "Verify homepage header"
+}

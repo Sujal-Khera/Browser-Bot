@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-16T18:47:22.590261+00:00",
+  "tool_dir": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\generated_tools\\nobuycart_tracker",
+  "overall_success": true,
+  "file_existence": {
+    "success": true,
+    "message": "All generated files exist.",
+    "details": {
+      "server_py_exists": true,
+      "mcp_tool_json_exists": true
+    }
+  },
+  "compilation": {
+    "success": true,
+    "message": "Python compilation successful.",
+    "details": {}
+  },
+  "import_check": {
+    "success": true,
+    "message": "Generated module imported successfully.",
+    "details": {}
+  },
+  "runtime_dry_run": {
+    "success": true,
+    "message": "Dry-run and outputs validation successful.",
+    "details": {
+      "duration_seconds": 4.7967288999998345,
+      "stdout": "",
+      "stderr": "",
+      "exception": null
+    }
+  }
+}

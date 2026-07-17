@@ -20,6 +20,7 @@ from browserbot.agents.pattern_extractor.models import (
     ExtractorOutput,
     ExtractorOutputValidator,
 )
+from browserbot.agents.pattern_extractor.generator import generate_workflow_spec
 
 __all__ = [
     "PatternExtractor",
@@ -29,4 +30,5 @@ __all__ = [
     "ExtractorOutputValidator",
     "confirm_parameters",
     "ConfirmedOutput",
+    "generate_workflow_spec",
 ]

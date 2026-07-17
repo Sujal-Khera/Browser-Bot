@@ -28,6 +28,27 @@ from browserbot.models.action_log import (
     Step,
     SCHEMA_PATH,
 )
+from browserbot.models.workflow_spec import (
+    WorkflowSpec,
+    WorkflowSpecValidator,
+    IRParameter,
+    IROutput,
+)
+from browserbot.models.mcp_tool import (
+    MCPToolManifest,
+    MCPToolManifestValidator,
+)
+from browserbot.models.validation_report import (
+    ValidationReport,
+    StageResult,
+)
+from browserbot.models.correction_payload import (
+    CorrectionPayload,
+)
+from browserbot.models.package import (
+    BrowserBotPackage,
+    BrowserBotPackageValidator,
+)
 
 __all__ = [
     "ActionLog",
@@ -48,5 +69,16 @@ __all__ = [
     "WaitStep",
     "Step",
     "SCHEMA_PATH",
+    "WorkflowSpec",
+    "WorkflowSpecValidator",
+    "IRParameter",
+    "IROutput",
+    "MCPToolManifest",
+    "MCPToolManifestValidator",
+    "ValidationReport",
+    "StageResult",
+    "CorrectionPayload",
+    "BrowserBotPackage",
+    "BrowserBotPackageValidator",
 ]
 

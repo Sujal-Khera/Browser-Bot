@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "mcp_tool_name": "execute_nobuycart_com",
+  "description": "Fills in a fake order code and navigates the website.",
+  "parameters_schema": {
+    "type": "object",
+    "properties": {
+      "fake_order_code": {
+        "type": "string",
+        "description": "Input field parameter 'fake_order_code'",
+        "default": "NBC-2026-E3ZXJC",
+        "is_sensitive": false
+      }
+    },
+    "required": []
+  },
+  "metadata": {
+    "browserbot_version": "0.1.0",
+    "generated_at": "2026-07-16T18:47:15.660229+00:00",
+    "source_session_id": "session_20260716T140748",
+    "site": "nobuycart.com"
+  }
+}

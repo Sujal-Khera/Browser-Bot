@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browserbot.local/schemas/package/v1.json",
+  "title": "BrowserBot Package Manifest Schema",
+  "description": "Defines the contract for the generated package manifest file (browserbot_package.json).",
+  "type": "object",
+
+  "required": [
+    "package_version",
+    "package_name",
+    "entry_point",
+    "dependencies",
+    "claude_config_snippet",
+    "metadata"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "package_version": {
+      "type": "string",
+      "description": "Schema version of the package manifest. Fixed at '1.0'.",
+      "const": "1.0"
+    },
+
+    "package_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The registered name of the MCP server package."
+    },
+
+    "entry_point": {
+      "type": "string",
+      "const": "server.py",
+      "description": "The main Python entrypoint script file."
+    },
+
+    "dependencies": {
+      "type": "array",
+      "description": "Python pip dependencies required to execute the tool.",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "claude_config_snippet": {
+      "type": "object",
+      "description": "The configuration object to register this stdio MCP server in Claude Desktop config.",
+      "required": ["command", "args", "env"],
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Executable to run the server."
+        },
+        "args": {
+          "type": "array",
+          "description": "Arguments passed to the command.",
+          "items": { "type": "string" }
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variables configured for execution.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Generation environment and provenance records.",
+      "required": [
+        "browserbot_version",
+        "generated_at",
+        "source_session_id",
+        "site"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "browserbot_version": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_session_id": {
+          "type": "string"
+        },
+        "site": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

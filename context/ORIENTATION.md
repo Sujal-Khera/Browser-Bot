@@ -320,3 +320,232 @@ python -m browserbot.agents.pattern_extractor --backend groq workflows/sessions/
 ---
 
 *Last updated: run_06 — 2026-07-16*
+
+---
+
+## 7. Phase 3B — Intermediate Representation (run_07)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_pattern_extractor.py -v` and confirm all `20 passed` | Validates that the zero, single, and multi-parameter edge cases parse, extract, and compile to IR successfully. |
+| B | Inspect the generated `workflows/sessions/workflow_spec_nobuycart.json` file | Verifies that a real recorded session converts into a valid, schema-compliant Intermediate Representation (IR). |
+| C | Open `docs/schemas/workflow_spec_schema.json` and read the schema fields | You must understand the schema definition of the spec, as this is the exact contract consumed by Phase 4. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **What the IR is** | `browserbot/models/workflow_spec.py` | A versioned, serializable logical model of the workflow steps and parameters, completely isolated from Playwright execution details. |
+| E | **Why it is independent from Playwright** | `run_07.md` | It represents the *logic* of the workflow (inputs, actions, outputs), allowing downstream generators to change without impacting extraction logic. |
+| F | **Optional and Repeated parameters** | `tests/fixtures/session_multi_params.json` | Shows how repeated secret values map to the same placeholder and how parameters can be designated as optional (`is_optional`). |
+| G | **How output values are tracked** | `browserbot/agents/pattern_extractor/generator.py` | Extraction actions (`extract_text`, `extract_attribute`) are automatically identified and mapped into the `outputs` list in the IR. |
+
+### Manual Tasks
+
+- [ ] Run the pattern extractor on your own recorded session without `--yes` and try marking a parameter optional using the `o` choice key in the confirmation CLI.
+- [ ] Verify that the generated spec file contains your confirmed parameter names and maps them correctly under the `parameter_name` key in the steps.
+
+---
+
+*Last updated: run_07 — 2026-07-16*
+
+---
+
+## 8. Phase 4A — Deterministic Code Generation (run_08)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_code_generator.py -v` and confirm all `11 passed` | Validates that the AST DSL validator correctly blocks/permits statements, and that the Jinja2 template renders and compiles. |
+| B | Run `python -m py_compile generated_tools/check_order_status/server.py` | Confirms the generated server file is syntactically valid Python. |
+| C | Open `browserbot/templates/mcp_server_template/server.py.j2` and read the template structure | Understand the lifecycle managers and logging wrapper definitions generated around the workflow body. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **The Template vs LLM split** | `run_08.md` | The template handles all imports, FastMCP wrappers, error handling, and browser setup. The LLM only maps the page interaction steps. |
+| E | **Approved DSL and Validator** | `browserbot/agents/code_generator/validator.py` | Security gate. The visitor checks every AST node in the LLM code block and raises `DSLValidationError` if an import, subprocess, or unauthorized variable load is found. |
+| F | **Headless configuration** | `server.py.j2` | The template reads the `BROWSERBOT_HEADLESS` environment variable, enabling seamless switching between background and visible test runs. |
+
+### Manual Tasks
+
+- [ ] Run the generator CLI with `--dry-run` to output a server file: `python -m browserbot.agents.code_generator --dry-run --input workflows/sessions/workflow_spec_nobuycart.json --output generated_tools/check_order_status/server.py`.
+- [ ] Open the output file and confirm the `run_workflow` function contains your parameter bindings (e.g. `.fill(fake_order_code)`) in the steps sequence.
+
+### Architecture Notes
+
+- Chaining locator methods (e.g. `page.get_by_role(...).fill(...)`) is resolved recursively in AST parsing. Only approved methods are allowed in calls.
+- Unassigned local variables (except parameters and page) are prohibited. New local variables are registered when defined via assignments in the AST.
+
+---
+
+*Last updated: run_08 — 2026-07-16*
+
+---
+
+## 9. Phase 4B — Complete Generation Pipeline (run_09)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_manifest.py -v` and confirm all `2 passed` | Validates that the manifest generator works correctly and that invalid manifests are caught by schema validation. |
+| B | Verify that `generated_tools/nobuycart_tracker/mcp_tool.json` exists | Confirms the complete pipeline successfully created the stdio server and its registry manifest side-by-side. |
+| C | Open `docs/schemas/mcp_tool_schema.json` and read the manifest JSON schema | Enforces strict validation of parameters schema, required properties, and metadata format. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Tool Manifest Role** | `run_09.md` | The manifest contains tool descriptions, names, and parameters required by LLM clients (like Claude) to register and select tools. |
+| E | **Relationship: Spec vs Manifest** | `run_09.md` | The spec IR is a developer-facing workflow definition. The manifest is a client-facing API declaration. |
+| F | **Deterministic Generation** | `browserbot/agents/code_generator/manifest.py` | Writing the manifest must be mechanical. Hallucinating schema formats or fields is prohibited. |
+
+### Manual Tasks
+
+- [ ] Inspect the generated `generated_tools/nobuycart_tracker/mcp_tool.json` file. Assert that its properties match `workflow_spec_nobuycart.json` parameters.
+- [ ] Run the generated server `python generated_tools/nobuycart_tracker/server.py` and verify it starts and registers the tool name `execute_nobuycart_com` correctly.
+
+---
+
+*Last updated: run_09 — 2026-07-16*
+
+---
+
+## 10. Phase 5A — Validator & Dry-Run Harness (run_10)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_validator.py -v` and confirm all `6 passed` | Validates that the validator pipeline successfully handles compilation failures, imports checks, output checks, and dry-run errors. |
+| B | Verify that `generated_tools/nobuycart_tracker/validation_report.json` exists | Confirms the code generator CLI automatically executed validation and saved the structured report on disk. |
+| C | Open `validation_report.json` and read the JSON schema stage outputs | Verifies the metrics of the runtime dry-run and compile results. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Harness dynamic importing** | `browserbot/agents/validator/harness.py` | Imports the server module dynamically at runtime using spec loaders, enabling off-line checks without running subprocesses. |
+| E | **Validation layers** | `browserbot/agents/validator/pipeline.py` | Runs stages sequentially: Existence $\rightarrow$ Compilation $\rightarrow$ Import $\rightarrow$ Dry-Run $\rightarrow$ Outputs. Stops on first fail. |
+| F | **Diagnostics (Screenshots)** | `server.py.j2` | The template captures failure screenshots when BROWSERBOT_FAILURE_SCREENSHOT_PATH is defined, allowing developers to see browser state at crash time. |
+
+### Manual Tasks
+
+- [ ] Run the generator with `BROWSERBOT_HEADLESS=false` to trigger a headed dry-run validation. Verify the browser opens, inputs variables, and closes cleanly.
+- [ ] View a failure screenshot under `screenshots/` after a failed dry-run (e.g. timeout) to inspect the browser state.
+
+---
+
+*Last updated: run_10 — 2026-07-16*
+
+---
+
+## 11. Phase 5B — Retry Feedback Loop (run_11)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_retry_loop.py -v` and confirm all `3 passed` | Validates that the coordinator terminates within 2 retries, triggers correction, and exits immediately on success. |
+| B | Check that `browserbot/models/correction_payload.py` has no lints | Ensures the data schema model for correction payload is correct and clean. |
+| C | Open a generated `server.py` and inspect the workflow body comments | Verifies the code generator LLM correctly resolved the feedback loop and output valid statement sequences. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Decoupled Orchestration** | `browserbot/agents/code_generator/coordinator.py` | PipelineCoordinator acts as the outer state machine, keeping retry logic isolated from LLM and validation layers. |
+| E | **Correction Prompting** | `browserbot/agents/code_generator/prompt.py` | User prompt appends the validation stage, exception traceback, and failing code snippet under the PREVIOUS GENERATION ERROR section. |
+| F | **Snippets extraction** | `browserbot/agents/code_generator/coordinator.py` | Extracts a narrow 10-line slice around the error line number, keeping LLM context window small. |
+
+### Manual Tasks
+
+- [ ] Modify a `workflow_spec.json` step manually to contain an invalid CSS selector (e.g. `div:invalid`), run the generator CLI, and observe in the log output how compilation fails, compiles the payload context, and retries.
+
+---
+
+*Last updated: run_11 — 2026-07-16*
+
+---
+
+## 12. Phase 6A — Packaging & Installation (run_12)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_packager.py -v` and confirm all `6 passed` | Validates that the package generator creates manifests, installs dependencies, templates PowerShell scripts, and verifies install status. |
+| B | Run `python -m browserbot.agents.packager --input generated_tools/nobuycart_tracker --output packages/execute_nobuycart_com` | Compiles the installable tool package and verifies its structure. |
+| C | Verify that `packages/execute_nobuycart_com/browserbot_package.json` exists | Confirms the compiler successfully created the package metadata manifest descriptor. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Package Structure** | `browserbot/agents/packager/packager.py` | Encapsulates code, tool manifests, verification reports, requirements, and PowerShell config scripts. |
+| E | **Installation Verification** | `browserbot/agents/packager/packager.py` | Checks schema constraints, file existence, and simulates mock integration into Claude Desktop config files. |
+| F | **Isolated Registry** | `docs/schemas/package_schema.json` | Keeps installation state and registration declarative, avoiding direct side-effects on developer machines. |
+
+### Manual Tasks
+
+- [ ] Inspect the generated package under `packages/execute_nobuycart_com/`. Ensure `install.ps1` contains the absolute path to `server.py`.
+- [ ] Read `browserbot_package.json` and verify the `claude_config_snippet` has the correct `command` and `env` properties.
+
+---
+
+*Last updated: run_12 — 2026-07-16*
+
+---
+
+## 13. Phase 6B — Registry & Result Formatting (run_13)
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Run `python -m pytest tests/test_registry.py -v` and confirm all `10 passed` | Validates the registry correctly creates, merges, backs up, and removes Claude Desktop config entries. |
+| B | Run `python -m browserbot.runtime register --package packages\execute_nobuycart_com --dry-run` | Confirms the registry resolves the correct `%APPDATA%\Claude\claude_desktop_config.json` path and prints the right snippet. |
+| C | Run `python -m pytest tests/test_result_formatting.py -v` and confirm all `18 passed` | Validates that `format_success` never returns raw JSON and `format_error` never exposes tracebacks. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Registry is additive, never destructive** | `browserbot/runtime/registry.py` | The registry merges into `mcpServers` without touching other entries. If Claude Desktop already has tools registered, they are preserved. |
+| E | **Error sentinel must stay in sync** | `result_formatter.py` `_ERROR_SENTINEL`, `harness.py` line checking | `format_error` always starts with `"I wasn't able to complete the workflow"`. The `DryRunHarness` uses this exact prefix to detect error returns. If you change one, change both. |
+| F | **Tools return prose, not JSON** | `server.py.j2`, `result_formatter.py` | Generated tools return human-readable strings Claude can relay verbatim. The internal dict is never serialized to `json.dumps()` in the tool return anymore. |
+| G | **Backup before write** | `registry.py` `_backup_config()` | The registry always creates a timestamped `.bak.json` before modifying the Claude Desktop config. If something goes wrong, the original is preserved. |
+
+### Manual Tasks
+
+- [ ] **Complete the live registration**: Run `python -m browserbot.runtime register --package packages\execute_nobuycart_com`, restart Claude Desktop, then ask: *"Check my order status for order code NBC-2026-E3ZXJC"*
+- [ ] **Test 3 paraphrased questions** to confirm Claude reliably selects the tool
+- [ ] **Test the error path**: Edit the generated `server.py` to use an unreachable URL, run the tool, confirm Claude responds with a clean error message (not a traceback)
+
+### Quick Command Reference
+
+```powershell
+# Register tool with Claude Desktop
+python -m browserbot.runtime register --package packages\execute_nobuycart_com
+
+# Dry-run (print config snippet without writing)
+python -m browserbot.runtime register --package packages\execute_nobuycart_com --dry-run
+
+# List all registered tools
+python -m browserbot.runtime list
+
+# Unregister a tool
+python -m browserbot.runtime unregister --tool execute_nobuycart_com
+
+# Run all tests
+python -m pytest tests/ -v   # 89 passed
+```
+
+---
+
+*Last updated: run_13 — 2026-07-17*

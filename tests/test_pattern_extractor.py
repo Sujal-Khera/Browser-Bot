@@ -46,7 +46,9 @@ from browserbot.agents.pattern_extractor.models import (
     ExtractorOutput,
     ExtractorOutputValidator,
 )
+from browserbot.agents.pattern_extractor.generator import generate_workflow_spec
 from browserbot.models.action_log import ActionLog
+from browserbot.models.workflow_spec import WorkflowSpec, WorkflowSpecValidator
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -366,3 +368,106 @@ def test_extract_json_trailing_text() -> None:
 def test_extract_json_returns_none_for_pure_text() -> None:
     result = _extract_json_from_text("I cannot do this task.")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Tests 18-20: Edge Case / WorkflowSpec IR Generation (Step 3.3 / 3.4)
+# ---------------------------------------------------------------------------
+
+
+def test_edge_case_zero_parameters() -> None:
+    log_path = Path(__file__).parent / "fixtures" / "session_zero_params.json"
+    log = ActionLog.from_file(log_path)
+
+    extractor = PatternExtractor(dry_run=True)
+    extractor_output = extractor.extract(log)
+
+    # Assert extractor output has 0 parameters
+    assert len(extractor_output.parameters) == 0
+    assert len(extractor_output.fixed_step_indices) == 2
+
+    confirmed = confirm_parameters(extractor_output, auto_confirm=True)
+    assert len(confirmed.parameters) == 0
+
+    spec = generate_workflow_spec(log, confirmed)
+    assert isinstance(spec, WorkflowSpec)
+    assert spec.schema_version == "1.0"
+    assert len(spec.parameters) == 0
+    assert len(spec.fixed_step_indices) == 2
+
+    # Outputs: one extract_text step in zero_params
+    assert len(spec.outputs) == 1
+    assert spec.outputs[0].name == "header"
+
+    # Validation passes
+    validator = WorkflowSpecValidator()
+    validator.assert_valid(spec.model_dump(mode="json", exclude_none=True))
+
+
+def test_edge_case_single_parameter() -> None:
+    log_path = Path(__file__).parent / "fixtures" / "session_single_param.json"
+    log = ActionLog.from_file(log_path)
+
+    extractor = PatternExtractor(dry_run=True)
+    extractor_output = extractor.extract(log)
+
+    # In dry-run, fill steps are parameters (1 fill step)
+    assert len(extractor_output.parameters) == 1
+
+    confirmed = confirm_parameters(extractor_output, auto_confirm=True)
+    assert len(confirmed.parameters) == 1
+
+    spec = generate_workflow_spec(log, confirmed)
+    assert isinstance(spec, WorkflowSpec)
+    assert len(spec.parameters) == 1
+    assert spec.parameters[0].name == "search_input"
+    assert spec.parameters[0].is_optional is False
+
+    # Validation passes
+    validator = WorkflowSpecValidator()
+    validator.assert_valid(spec.model_dump(mode="json", exclude_none=True))
+
+
+def test_edge_case_multiple_parameters() -> None:
+    log_path = Path(__file__).parent / "fixtures" / "session_multi_params.json"
+    log = ActionLog.from_file(log_path)
+
+    extractor = PatternExtractor(dry_run=True)
+    extractor_output = extractor.extract(log)
+
+    # 4 fill steps in session_multi_params
+    assert len(extractor_output.parameters) == 4
+
+    # Mark referral_code optional manually for the test
+    raw_params = list(extractor_output.parameters)
+    # referral_code is the 4th parameter (index 3)
+    raw_params[3] = raw_params[3].model_copy(update={"is_optional": True})
+    extractor_output = extractor_output.model_copy(update={"parameters": raw_params})
+
+    confirmed = confirm_parameters(extractor_output, auto_confirm=True)
+    assert len(confirmed.parameters) == 4
+    assert confirmed.parameters[3].is_optional is True
+
+    spec = generate_workflow_spec(log, confirmed)
+    assert isinstance(spec, WorkflowSpec)
+    assert len(spec.parameters) == 4
+
+    # Assert usernames/passwords/confirm_password mapped correctly
+    assert spec.parameters[0].name == "username"
+    assert spec.parameters[1].name == "password"
+    assert spec.parameters[2].name == "confirm_password"
+    assert spec.parameters[3].name == "referral_code"
+
+    assert spec.parameters[1].is_sensitive is True
+    assert spec.parameters[2].is_sensitive is True
+    assert spec.parameters[3].is_optional is True
+
+    # Verify parameter reference mapping in steps
+    assert spec.steps[1]["parameter_name"] == "username"
+    assert spec.steps[2]["parameter_name"] == "password"
+    assert spec.steps[3]["parameter_name"] == "confirm_password"
+    assert spec.steps[4]["parameter_name"] == "referral_code"
+
+    # Validation passes
+    validator = WorkflowSpecValidator()
+    validator.assert_valid(spec.model_dump(mode="json", exclude_none=True))

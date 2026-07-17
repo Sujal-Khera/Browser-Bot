@@ -190,6 +190,7 @@ def confirm_parameters(
         print(f"    {_BOLD}[Y / Enter]{_RESET} Accept")
         print(f"    {_BOLD}[r]{_RESET}         Rename")
         print(f"    {_BOLD}[n]{_RESET}         Reject (remove this parameter)")
+        print(f"    {_BOLD}[o]{_RESET}         Mark optional and accept")
 
         for i, param in enumerate(extractor_output.parameters):
             _print_parameter(i, param)
@@ -204,8 +205,8 @@ def confirm_parameters(
                 continue
 
             choice = _prompt_choice(
-                f"\n  Confirm? [{_BOLD}Y{_RESET}/n/r]: ",
-                ("y", "n", "r", ""),
+                f"\n  Confirm? [{_BOLD}Y{_RESET}/n/r/o]: ",
+                ("y", "n", "r", "o", ""),
             )
 
             if choice in ("y", ""):
@@ -233,6 +234,7 @@ def confirm_parameters(
                     log_step_index=param.log_step_index,
                     description=param.description,
                     is_sensitive=param.is_sensitive,
+                    is_optional=param.is_optional,
                 )
                 confirmed_params.append(renamed)
                 print(f"  -> {_YELLOW}Renamed{_RESET}: {param.name} -> {new_name}")
@@ -243,6 +245,16 @@ def confirm_parameters(
                         "renamed_to": new_name,
                         "step_idx": param.log_step_index,
                     },
+                )
+
+            elif choice == "o":
+                # ExtractedParameter is immutable, use model_copy
+                optional_param = param.model_copy(update={"is_optional": True})
+                confirmed_params.append(optional_param)
+                print(f"  -> {_GREEN}Accepted (Optional){_RESET}: {param.name}")
+                log.info(
+                    "Parameter accepted as optional",
+                    extra={"param_name": param.name, "step_idx": param.log_step_index},
                 )
 
     # ---- Offer to add missing parameters ----
@@ -267,6 +279,8 @@ def confirm_parameters(
                 continue
 
             description = input("    Description (optional, press Enter to skip): ").strip() or None
+            is_optional_str = _prompt_choice("    Is optional? [y/N]: ", ("y", "n", ""))
+            is_optional = is_optional_str == "y"
 
             new_param = ExtractedParameter(
                 name=name,
@@ -274,12 +288,13 @@ def confirm_parameters(
                 log_step_index=step_index,
                 description=description,
                 is_sensitive=False,
+                is_optional=is_optional,
             )
             confirmed_params.append(new_param)
-            print(f"  -> {_GREEN}Added{_RESET}: {name}")
+            print(f"  -> {_GREEN}Added{_RESET}: {name} (Optional: {is_optional})")
             log.info(
                 "Parameter added by user",
-                extra={"param_name": name, "step_idx": step_index},
+                extra={"param_name": name, "step_idx": step_index, "is_optional": is_optional},
             )
 
     # ---- Validate the confirmed output ----

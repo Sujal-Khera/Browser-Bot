@@ -1,0 +1,14 @@
+{
+  "parameters": [
+    {
+      "name": "search_query",
+      "example_value": "learning agents",
+      "log_step_index": 1,
+      "description": "The search term to query",
+      "is_sensitive": false,
+      "is_optional": false
+    }
+  ],
+  "fixed_step_indices": [0, 2],
+  "workflow_description": "Search for a query"
+}
