@@ -35,4 +35,10 @@ workflows/sessions/
 
 # Raw Playwright codegen scripts (intermediate artifacts)
 *_raw.py
+
+# Packages output (Step 6.1 compilation results)
+packages/
+
+# Validation screenshots (Step 5.2 failure captures)
+screenshots/
 
