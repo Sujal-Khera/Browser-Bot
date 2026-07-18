@@ -932,6 +932,36 @@ An architectural and security audit has verified that the codebase matches the t
 
 *Last updated: run_21 — 2026-07-18*
 
+## 22. Phase v2.1 — Orchestration Server Foundation (run_22)
+
+This section details the FastAPI orchestration server skeleton, SQLite state database, and REST routing endpoints that expose the pipeline steps.
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Start the server: `python -m browserbot.server` and verify it runs on `127.0.0.1:8765` | This is your backend process. The UI single-page application and programmatic clients depend on it. |
+| B | Run a health check query: `curl http://127.0.0.1:8765/health` | Smoke-tests that the server is alive and responding with `{"status":"ok"}`. |
+| C | Run the new server and DB unit tests: `uv run pytest tests/test_server_db.py tests/test_server_app.py -v` | Confirms the SQLite CRUD operations and REST routing schemas work flawlessly. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Local-Only Binding** | `browserbot/server/config.py` | The server strictly binds to `127.0.0.1` and does not accept external connections to preserve the local-first security NFR. |
+| E | **State Store Cache** | `browserbot/server/db.py` | SQLite manages wizard session stage state metadata, but the raw JSON files on disk remain the absolute source of truth. |
+| F | **Stage-by-Stage API Facade** | `browserbot/server/routes/` | Exposes endpoints (`extract`, `confirm`, `generate`, `package`, `register`) wrapping the existing CLI pipeline steps 1:1, enabling a wizard client UI. |
+
+### Command Reference
+
+* **Start Orchestration Server**: `python -m browserbot.server`
+* **Run Server Tests**: `uv run pytest tests/test_server_db.py tests/test_server_app.py -v`
+
+---
+
+*Last updated: run_22 — 2026-07-18*
+
+
 
 
 

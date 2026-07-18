@@ -41,3 +41,8 @@ httpx
 ruff
 mypy
 pre-commit
+
+# FastAPI Server (v2.1)
+fastapi
+uvicorn
+

@@ -23,6 +23,8 @@ dependencies = [
     "rich>=15.0.0",
     "ruff>=0.15.21",
     "typer>=0.26.8",
+    "fastapi",
+    "uvicorn",
 ]
 [tool.setuptools.packages.find]
 include = ["browserbot", "browserbot.*"]
