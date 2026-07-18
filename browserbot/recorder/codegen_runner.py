@@ -212,6 +212,18 @@ def run_recording_session(
 
     scrubbed_log.to_file(session_json_path)
 
+    # Save secret mapping if any secrets were scrubbed
+    if scrub_result.value_map:
+        secrets_path = Path(session_json_path).parent / f"{session_id}_secrets.json"
+        reverse_map = {v: k for k, v in scrub_result.value_map.items()}
+        try:
+            with open(secrets_path, "w", encoding="utf-8") as f:
+                import json
+                json.dump(reverse_map, f, indent=2)
+            log.info("Secrets mapping saved to disk", extra={"path": str(secrets_path)})
+        except Exception as exc:
+            log.error("Failed to save secrets mapping", extra={"path": str(secrets_path), "error": str(exc)})
+
     log.info(
         "Session saved",
         extra={

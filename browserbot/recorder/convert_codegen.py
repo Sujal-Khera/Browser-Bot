@@ -99,6 +99,42 @@ _TIMESTAMP_STEP: float = 0.5
 # Selector extraction helpers
 # ---------------------------------------------------------------------------
 
+def _extract_string_literal(method_name: str, chain: str) -> str | None:
+    """
+    Extract a quoted string literal argument of a method call,
+    supporting escaped quotes within the string literal (e.g. \\" or \\').
+    """
+    # Double quoted: method_name("...")
+    pattern_double = rf'{method_name}\(\s*"((?:[^"\\]|\\.)*)"'
+    m = re.search(pattern_double, chain)
+    if m:
+        val = m.group(1)
+        return val.replace('\\"', '"').replace("\\'", "'").replace('\\\\', '\\')
+
+    # Single quoted: method_name('...')
+    pattern_single = rf"{method_name}\(\s*'((?:[^'\\]|\\.)*)'"
+    m = re.search(pattern_single, chain)
+    if m:
+        val = m.group(1)
+        return val.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+
+    # Double quoted with keyword arg, e.g. name="value"
+    pattern_double_kw = rf'{method_name}\s*=\s*"((?:[^"\\]|\\.)*)"'
+    m = re.search(pattern_double_kw, chain)
+    if m:
+        val = m.group(1)
+        return val.replace('\\"', '"').replace("\\'", "'").replace('\\\\', '\\')
+
+    # Single quoted with keyword arg, e.g. name='value'
+    pattern_single_kw = rf"{method_name}\s*=\s*'((?:[^'\\]|\\.)*)'"
+    m = re.search(pattern_single_kw, chain)
+    if m:
+        val = m.group(1)
+        return val.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+
+    return None
+
+
 def _infer_strategy(locator_chain: str) -> tuple[str, dict[str, str | None]]:
     """
     Infer the SelectorInfo strategy and extra kwargs from a locator chain string.
@@ -124,9 +160,9 @@ def _infer_strategy(locator_chain: str) -> tuple[str, dict[str, str | None]]:
     if "get_by_role" in locator_chain:
         # Extract role and name if present
         role_m = re.search(r"get_by_role\(['\"](\w+)['\"]", locator_chain)
-        name_m = re.search(r"name=['\"]([^'\"]+)['\"]", locator_chain)
+        name = _extract_string_literal("name", locator_chain)
         extras["aria_role"] = role_m.group(1) if role_m else None
-        extras["aria_name"] = name_m.group(1) if name_m else None
+        extras["aria_name"] = name
         return "role", extras
 
     # Plain locator()
@@ -145,22 +181,21 @@ def _extract_locator_value(locator_chain: str) -> str:
     """
     # get_by_label('Order ID') -> 'Order ID'
     for prefix in ("get_by_label", "get_by_placeholder", "get_by_text", "get_by_test_id"):
-        m = re.search(rf"{prefix}\(['\"]([^'\"]+)['\"]", locator_chain)
-        if m:
-            return m.group(1)
+        val = _extract_string_literal(prefix, locator_chain)
+        if val is not None:
+            return val
 
     # get_by_role('button', name='Submit') -> 'button:Submit'
     if "get_by_role" in locator_chain:
         role_m = re.search(r"get_by_role\(['\"](\w+)['\"]", locator_chain)
-        name_m = re.search(r"name=['\"]([^'\"]+)['\"]", locator_chain)
+        name = _extract_string_literal("name", locator_chain)
         role = role_m.group(1) if role_m else "unknown"
-        name = name_m.group(1) if name_m else ""
         return f"{role}:{name}" if name else role
 
     # locator('css selector') -> 'css selector'
-    m = re.search(r"locator\(['\"]([^'\"]+)['\"]", locator_chain)
-    if m:
-        return m.group(1)
+    val = _extract_string_literal("locator", locator_chain)
+    if val is not None:
+        return val
 
     # filter(has_text='X') chain — return full chain as value
     return locator_chain.strip()

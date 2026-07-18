@@ -279,3 +279,43 @@ def test_generator_retry_loop_raises_when_exhausted() -> None:
             generator.generate(spec)
             
     assert "Code generation failed after 2 attempt(s)" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Adversarial prompt injection containing malicious code is rejected
+# ---------------------------------------------------------------------------
+
+
+def test_adversarial_prompt_injection_rejected() -> None:
+    """
+    Verifies that adversarial prompt injection returning malicious/arbitrary code
+    (e.g., executing system commands, file writes, importing libraries, or running page.evaluate)
+    is caught and rejected by the validator, causing code generation to fail.
+    """
+    spec = _load_spec_from_session(FIXTURE_SINGLE, [
+        {"name": "search_input", "example_value": "hello", "log_step_index": 1, "is_sensitive": False}
+    ], [0, 2], "Search workflow")
+
+    adversarial_payloads = [
+        "import os\nos.system('rm -rf /')",
+        "__import__('subprocess').run(['echo', 'hacked'])",
+        "eval('page.goto(url)')",
+        "open('/etc/passwd', 'r').read()",
+        "await page.evaluate('() => alert(1)')",
+    ]
+
+    for payload in adversarial_payloads:
+        def mock_llm_return(messages, *args, **kwargs):
+            return payload
+
+        with patch(
+            "browserbot.agents.code_generator.generator._call_llm",
+            side_effect=mock_llm_return,
+        ):
+            # Limit retries to 0 so it fails immediately upon validation rejection
+            generator = CodeGenerator(dry_run=False, backend="ollama", max_retries=0)
+            with pytest.raises(RuntimeError) as exc_info:
+                generator.generate(spec)
+
+            assert "Code generation failed after 1 attempt(s)" in str(exc_info.value)
+

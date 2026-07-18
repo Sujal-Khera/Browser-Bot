@@ -10,8 +10,10 @@ Invoked by Claude Desktop via the MCP protocol.
 """
 
 from browserbot.runtime.registry import ClaudeDesktopRegistry, RegistrationError
-from browserbot.runtime.result_formatter import format_error, format_success
-from browserbot.runtime.resilience import resolve_locator
+from browserbot.runtime.result_formatter import format_success, format_error
+from browserbot.runtime.resilience import resolve_locator, resilient_click, resilient_fill
+from browserbot.runtime.pii_audit import audit_artifacts
+from browserbot.runtime.benchmark import run_benchmark
 
 __all__ = [
     "ClaudeDesktopRegistry",
@@ -19,4 +21,8 @@ __all__ = [
     "format_success",
     "format_error",
     "resolve_locator",
+    "resilient_click",
+    "resilient_fill",
+    "audit_artifacts",
+    "run_benchmark",
 ]

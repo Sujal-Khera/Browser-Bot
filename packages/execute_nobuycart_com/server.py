@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 
 from browserbot.logging import get_logger
 from browserbot.runtime.result_formatter import format_success, format_error
-from browserbot.runtime.resilience import resolve_locator
+from browserbot.runtime.resilience import resolve_locator, resilient_click, resilient_fill
 
 log = get_logger("browserbot.runtime.generated_tool")
 
@@ -49,12 +49,12 @@ async def run_workflow(
         try:
             # ---- WORKFLOW BODY START ----
             await page.goto("https://nobuycart.com/tracking/")
-            await (await resolve_locator(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})).click()
-            await (await resolve_locator(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})).fill(textbox_fake_order_code)
-            await (await resolve_locator(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})).click()
-            await (await resolve_locator(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})).fill(textbox_fake_order_code_2)
-            await (await resolve_locator(page, {'value': 'button:Show fake timeline', 'strategy': 'role', 'aria_role': 'button', 'aria_name': 'Show fake timeline'})).click()
-            await (await resolve_locator(page, {'value': '1Fake order receivedPretend checkpoint updated in this browser.2Packed in the', 'strategy': 'text'})).click()
+            await resilient_click(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})
+            await resilient_fill(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'}, textbox_fake_order_code)
+            await resilient_click(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'})
+            await resilient_fill(page, {'value': 'textbox:Fake order code', 'strategy': 'role', 'aria_role': 'textbox', 'aria_name': 'Fake order code'}, textbox_fake_order_code_2)
+            await resilient_click(page, {'value': 'button:Show fake timeline', 'strategy': 'role', 'aria_role': 'button', 'aria_name': 'Show fake timeline'})
+            await resilient_click(page, {'value': '1Fake order receivedPretend checkpoint updated in this browser.2Packed in the', 'strategy': 'text'})
             # ---- WORKFLOW BODY END ----
 
             # ---- OUTPUT EXTRACTION ----
@@ -65,6 +65,16 @@ async def run_workflow(
 
         except Exception as exc:
             log.error("Workflow step execution failed", extra={"error": str(exc)})
+            try:
+                # Write a needs_healing.flag file in the package directory for self-healing
+                pkg_dir = os.path.dirname(os.path.abspath(__file__))
+                flag_path = os.path.join(pkg_dir, "needs_healing.flag")
+                with open(flag_path, "w", encoding="utf-8") as f:
+                    f.write(str(exc))
+                log.info("Self-healing flag written to disk", extra={"path": flag_path})
+            except Exception as flag_exc:
+                log.error("Failed to write self-healing flag", extra={"error": str(flag_exc)})
+
             try:
                 screenshot_path = os.getenv("BROWSERBOT_FAILURE_SCREENSHOT_PATH")
                 if screenshot_path:

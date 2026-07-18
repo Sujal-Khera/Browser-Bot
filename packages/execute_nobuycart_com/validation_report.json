@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-07-17T15:35:19.871511+00:00",
-  "tool_dir": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\generated_tools\\nobuycart_tracker",
+  "generated_at": "2026-07-17T15:49:25.320090+00:00",
+  "tool_dir": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\generated_tools\\nobuycart_com",
   "overall_success": true,
   "file_existence": {
     "success": true,
@@ -25,7 +25,7 @@
     "success": true,
     "message": "Dry-run and outputs validation successful.",
     "details": {
-      "duration_seconds": 2.716384700001072,
+      "duration_seconds": 5.493292700000893,
       "stdout": "",
       "stderr": "",
       "exception": null,

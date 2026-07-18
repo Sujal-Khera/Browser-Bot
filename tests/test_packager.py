@@ -77,6 +77,7 @@ def test_packager_success(tmp_path: Path) -> None:
     assert (out_dir / "browserbot_package.json").exists()
     assert (out_dir / "install.ps1").exists()
     assert (out_dir / "requirements.txt").exists()
+    assert (out_dir / "README.md").exists()
 
     # Validate generated package schema
     pkg_manifest = BrowserBotPackage.from_file(out_dir / "browserbot_package.json")

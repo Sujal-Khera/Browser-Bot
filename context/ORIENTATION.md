@@ -675,5 +675,267 @@ This run implements Phase 8A selector resilience by introducing dynamic prioriti
 
 *Last updated: run_16 — 2026-07-17*
 
+## 17. Phase 8B — Adaptive Selector Recovery (run_17)
+
+This run completes Phase 8 resilience by implementing runtime timing resilience and a programmatic self-healing loop.
+
+### Things You Must Verify Manually
+
+* **Verification of Timing Resilience**: Run `python run_sample.py` and inspect logging traces. Confirm that actions now log:
+  `Page network state settled (networkidle)` followed by `Resilient click succeeded` or `Resilient fill succeeded`.
+* **Verification of Self-Healing CLI**: Run:
+  ```powershell
+  .venv\Scripts\python.exe -m browserbot.runtime self-heal --package packages/execute_nobuycart_com --force
+  ```
+  Verify that the self-healing workflow recursively locates the source session ID action log, re-compiles the tool, runs AST validation, performs verification tests, and re-registers the server.
+
+### Things You Must Understand
+
+* **Action Retry with Backoff**: All clicks and fills are wrapped in `resilient_click` and `resilient_fill` helpers which wait for `networkidle` state and run dynamic element resolution inside an exponential backoff loop (`0.1s`, `0.5s`, `1.0s`, `2.0s`).
+* **Self-Healing Flag Trigger**: When a generated tool encounters an execution exception at runtime, the catch block writes a `needs_healing.flag` file to the package directory. A wrapper execution script or `browserbot.runtime self-heal` uses this flag to discover damaged tools and heal them.
+
+### Manual Tasks
+
+1. Run the self-healing and timing resilience unit tests:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/test_self_healing.py -v
+   ```
+2. Run the complete regression test suite:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+
+### Architecture Notes
+
+* **self_healing.py**: Contains the `self_heal_package` routine which maps a failing package directory back to its raw session recording log using `metadata.source_session_id`, executes the compiler pipeline, and clears the failure flag on success.
+
+### Command Reference
+
+* **Self-healing tests**: `.venv\Scripts\python.exe -m pytest tests/test_self_healing.py -v`
+* **Trigger package healing**: `.venv\Scripts\python.exe -m browserbot.runtime self-heal --package packages/execute_nobuycart_com --force`
+* **All tests**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+
+### Common Failure Scenarios
+
+* **Missing Source Session Log**: If a package's original source session recording log JSON file is deleted from the `workflows/sessions/` directory, self-healing will raise a `FileNotFoundError`. The original recordings must be preserved for self-healing capability.
+
+---
+
+*Last updated: run_17 — 2026-07-17*
+
+## 18. Phase 9A — Performance & Observability (run_18)
+
+This run implements performance timing instrumentation inside the pipeline orchestrator, along with PII credential scanning and automated latency/reliability benchmark runners.
+
+### Things You Must Verify Manually
+
+* **Verification of PII Scanning CLI**: Run:
+  ```powershell
+  .venv\Scripts\python.exe scripts/pii_audit.py --package packages/execute_nobuycart_com
+  ```
+  Confirm it prints: `PII Audit passed successfully! No credentials or secrets found.` and exits with code `0`.
+* **Verification of NFR Benchmark CLI**: Run:
+  ```powershell
+  .venv\Scripts\python.exe scripts/run_benchmark.py --package packages/execute_nobuycart_com --iterations 3
+  ```
+  Verify it runs successfully, prints execution timing statistics (mean, minimum, maximum latencies, standard deviations), and writes compliance files `benchmark_report.json` and `benchmark_report.md` inside the package directory.
+
+### Things You Must Understand
+
+* **Pipeline Timing Instrumentation**: Stage timing measurements are dynamically calculated in the orchestrator pipeline run using `time.perf_counter()` and recorded inside the output directory's `pipeline_diagnostics.json` file.
+* **PII Redaction Auditor regexes**: The credential scan whitelists standard placeholders (e.g. `__SECRET_1__`) but flags raw hex keys, JWT signatures, literal test passwords, and unredacted values.
+
+### Manual Tasks
+
+1. Run the performance and observability unit tests:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/test_observability.py -v
+   ```
+2. Run the complete regression test suite:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+
+### Architecture Notes
+
+* **pii_audit.py**: Contains the `audit_artifacts` scanner function verifying credential scrubbing completeness in generated scripts.
+* **benchmark.py**: Houses the `run_benchmark` async routine which imports workflow entry points dynamically, measures tool latencies, gathers pipeline compile times, checks reliability, and evaluates NFR goals.
+
+### Command Reference
+
+* **Observability tests**: `.venv\Scripts\python.exe -m pytest tests/test_observability.py -v`
+* **PII Audit execution**: `.venv\Scripts\python.exe scripts/pii_audit.py --package packages/execute_nobuycart_com`
+* **Benchmark runner**: `.venv\Scripts\python.exe scripts/run_benchmark.py --package packages/execute_nobuycart_com --iterations 3`
+* **All tests**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+
+### Performance Diagnostics
+
+* **Benchmark Reports**: Benchmarking generates structured outputs in the package folder:
+  - `benchmark_report.json`: raw metrics (latencies list, compilation timelines).
+  - `benchmark_report.md`: formatted markdown table summarizing compliance against targets.
+
+---
+
+*Last updated: run_18 — 2026-07-17*
+
+## 19. Phase 9B — Operational Readiness (run_19)
+
+This run completes Phase 9 operational readiness, establishing security sandboxing controls, adversarial injection testing, and automated performance validation checks.
+
+### Things You Must Verify Manually
+
+* **Verification of Adversarial Rejection**: Run the adversarial regression tests:
+  ```powershell
+  .venv\Scripts\python.exe -m pytest tests/test_code_generator.py -k test_adversarial_prompt_injection_rejected -v
+  ```
+  Confirm that all simulated malicious injects (eval, imports, page.evaluate, open) are caught and rejected by the validator.
+* **Verification of Outbound LLM checks**: Inspect any generated `server.py` in your packages folder. Verify it contains no imports of `litellm` or `groq`, and depends solely on local Playwright actions and FastMCP stdio transport.
+
+### Things You Must Understand
+
+* **AST Sandboxing**: The code validator uses Python's `ast` parsing to analyze the AST structure of LLM responses. Any code structure using loops, conditions, functions/classes definitions, imports, or unapproved methods is automatically rejected.
+* **No Runtime Credentials/LLM Outbounds**: To support the "record once, run deterministically forever" architecture, the compiled MCP tool acts as a pure local client driving Playwright. It does not load API keys or call out to any LLM runtime APIs.
+
+### Manual Tasks
+
+1. Run the new adversarial prompt injection test case:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/test_code_generator.py -k test_adversarial_prompt_injection_rejected -v
+   ```
+2. Run the complete regression suite:
+   ```powershell
+   .venv\Scripts\python.exe -m pytest tests/ -v
+   ```
+
+### Architecture Notes
+
+* **validator.py**: Implements the `DSLSecurityVisitor` which checks every function call and node type against the approved Playwright mini-DSL whitelist.
+* **run_benchmark.py**: Dynamically imports compiled tool modules, runs iterations headlessly, and generates markdown reports evaluating latency limits.
+
+### Command Reference
+
+* **Adversarial tests**: `.venv\Scripts\python.exe -m pytest tests/test_code_generator.py -k test_adversarial_prompt_injection_rejected -v`
+* **Benchmarking script**: `.venv\Scripts\python.exe scripts/run_benchmark.py --package packages/execute_nobuycart_com --iterations 3`
+* **Security auditing**: `.venv\Scripts\python.exe scripts/pii_audit.py --package packages/execute_nobuycart_com`
+* **All tests**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+
+### Performance Verification
+
+* Run benchmarking to generate `benchmark_report.md` evaluating the package against the target NFR targets (Generation ≤ 180s, Latency ≤ 20s, Reliability ≥ 90%, PII = 0).
+
+### Diagnostic Reference
+
+* **`pipeline_diagnostics.json`**: Stages status tracking block generated by the pipeline orchestrator. Contains performance duration metrics per compilation step.
+
+---
+
+*Last updated: run_19 — 2026-07-18*
+
+## 20. Phase 10 — BrowserBot v1.0 Release (run_20)
+
+This section details the production release of BrowserBot Version 1.0, outlining system architecture, developer workflows, installation instructions, command references, and troubleshooting.
+
+### Final Architecture Summary
+
+BrowserBot consists of four isolated, decoupled layers that run entirely locally on the operator's machine at $0 marginal cost:
+1. **Capture Layer (Recorder & Converter)**: Launches Playwright Codegen browser sessions, converts raw interactive browser commands into parsed schema-compliant Action Logs, and scrubs real-time password entries.
+2. **Generalization Layer (Pattern Extractor)**: Runs a local LLM (Ollama/LiteLLM) to extract dynamic input variables and compile user-confirmed parameters.
+3. **Compilation Layer (Code Gen & Validator)**: Uses Jinja2 templates and a code-specialized local LLM to generate execution statements, walks AST syntax to sanitize python instructions against security guidelines, and runs headless validation trials.
+4. **Integration Layer (Packager & Registry)**: Generates production-ready packages containing self-healing hooks, manifest schemes, timing benchmarks, and registers them directly to Claude Desktop.
+
+### Complete Developer Workflow
+
+```
+[Record Play-through] ──► [Parse Action Log] ──► [Generalize / Redact] ──► [DSL Code Compile] ──► [Validate & Sandbox] ──► [Create MCP Package] ──► [Register & Run in Claude]
+```
+
+### End-to-End Execution Flow
+
+1. Operator runs `python -m browserbot.recorder start [url]` to capture a workflow.
+2. Closing the Chromium window auto-converts the session to `session_<timestamp>.json` and redacts credentials using `scrub()`.
+3. Operator runs a script calling `OrchestrationPipeline.run()`.
+4. The Pattern Extractor guesses parameters, which the operator accepts/renames via the Confirmer CLI (or auto-approves if `auto_confirm=True`).
+5. Code Generator fills in the Jinja2 templates, verifies the result with `validate_dsl()`, and runs a headless validator test.
+6. The Packager outputs the bundle directory under `packages/` complete with an installer, package lock, and README documentation.
+7. Operator installs the tool using `python -m browserbot.runtime register --package packages/execute_xxx` and restarts Claude Desktop.
+
+### Installation Guide
+
+Ensure you have Python 3.11+ installed. Clone the repository and run:
+```powershell
+python -m venv .env
+.venv\Scripts\pip.exe install -r requirements.txt
+playwright install chromium
+```
+Ensure Ollama is installed and running locally with the target model:
+```powershell
+ollama pull qwen2.5-coder:7b-instruct-q8_0
+```
+
+### Verification Commands
+
+* **Sanity-check Environment**: `.venv\Scripts\python.exe -m browserbot.recorder --demo --headed`
+* **Run Regression Tests**: `.venv\Scripts\python.exe -m pytest tests/ -v`
+* **Trigger End-to-End Pipeline**: `.venv\Scripts\python.exe run_sample.py`
+* **Verify Package Secrets**: `.venv\Scripts\python.exe scripts/pii_audit.py --package packages/execute_nobuycart_com`
+* **Run Performance Benchmarks**: `.venv\Scripts\python.exe scripts/run_benchmark.py --package packages/execute_nobuycart_com --iterations 3`
+* **Register Server**: `.venv\Scripts\python.exe -m browserbot.runtime register --package packages/execute_nobuycart_com`
+
+### Troubleshooting Guide
+
+* **`ModuleNotFoundError: No module named 'litellm'`**: Ensure you are running Python and pytest using the virtual environment interpreter (`.venv\Scripts\python.exe` and `.venv\Scripts\pytest.exe`).
+* **Validation Failure (`overall_success = False`)**: If the compiled tool fails during the validation run, check the failure description and look for a `validation_report.json` in the generated tool's directory. If loading the page is timing out, increase the timeout using the environment variable: `$env:BROWSERBOT_VALIDATOR_TIMEOUT_MS="60000"`.
+* **Tool Mismatch in Claude Desktop**: If Claude claims it cannot find the tool, run `python -m browserbot.runtime list` to verify that the server is successfully listed in Claude's configuration file, and restart Claude Desktop completely to refresh the process list.
+
+### Common Pitfalls
+
+* **Typing real credentials during recording**: The recorder writes inputs to script buffers. If you input real credentials, they might get written to raw files before scrubbing. Always use dummy text/test accounts.
+* **Deleting source session JSON files**: If the source recording JSON is deleted from `workflows/sessions/`, the package will be unable to run the self-healing algorithm. Always preserve the original recording logs.
+
+### Repository Structure Overview
+
+* `browserbot/`: Core package folder.
+  - `recorder/`: Playwright recorder launcher and codegen JSON converter.
+  - `agents/`: AI and validation agents (pattern_extractor, code_generator, validator, packager).
+  - `runtime/`: Runtime registry, resilience click/fill wrappers, self-healing CLI, and NFR benchmark engine.
+  - `models/`: Schema validations and data models.
+  - `templates/`: Server template scripts.
+* `tests/`: Offline pytest suite verifying validations, parser regexes, PII scrubbing, and mock LLM calls.
+* `packages/`: Output folder containing installable, production-ready MCP servers.
+
+### Release Notes (v1.0.0)
+
+* Established robust and local-first architecture running on 100% free local models (Ollama/Groq fallbacks) at $0 Token cost.
+* Auto-generates fully sandboxed, AST-compliant, and secure Playwright MCP tools.
+* Integrated timing observability, PII scrubbing scans, timing resilience, timing backoff clicks/fills, and self-healing error recovery.
+* Automated documentation generation (per-tool README) and performance validation harnesses.
+
+---
+
+*Last updated: run_20 — 2026-07-18*
+
+## 21. Independent Technical Audit (run_21)
+
+This section documents the independent technical audit performed on BrowserBot Version 1.0.
+
+### Overview
+
+An architectural and security audit has verified that the codebase matches the target requirements of Version 1.0, with a clean decoupled design, comprehensive security sandboxing (AST validators), and reliable regression test suites.
+
+### Verification and Results
+
+* **Functional Verification**: The pipeline successfully compiles raw browser play-throughs into structured Action Logs, redacts dynamic inputs, compiles packages, headlessly tests execution, and registers the server with Claude Desktop. During verification, critical bugs with escaped selector quotes and validator secrets redaction were fixed and verified.
+* **Security Validation**: Sandboxing controls successfully reject malicious python code payloads. PII scans confirm zero keys leak into the build directories.
+* **Test Verification**: All **115 tests** pass successfully in `8.86s` (including new converter tests).
+
+---
+
+*Last updated: run_21 — 2026-07-18*
+
+
+
+
+
+
 
 

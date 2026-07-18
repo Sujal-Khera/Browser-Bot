@@ -77,13 +77,13 @@ def _build_dry_run_body(spec: WorkflowSpec) -> str:
 
         elif action == "click":
             sel = step.get("selector", {})
-            lines.append(f'await (await resolve_locator(page, {repr(sel)})).click()')
+            lines.append(f'await resilient_click(page, {repr(sel)})')
 
         elif action == "fill":
             sel = step.get("selector", {})
             # Use parameter variable name or fallback to hardcoded value
             fill_value = param_var if param_var else f'"{step.get("value", "")}"'
-            lines.append(f'await (await resolve_locator(page, {repr(sel)})).fill({fill_value})')
+            lines.append(f'await resilient_fill(page, {repr(sel)}, {fill_value})')
 
         elif action == "wait":
             wait_for = step.get("wait_for")

@@ -28,7 +28,7 @@ class ValidationPipeline:
     def __init__(self, screenshot_dir: Path | None = None) -> None:
         self.screenshot_dir = screenshot_dir or Path("screenshots")
 
-    def validate(self, spec: WorkflowSpec, tool_dir: Path) -> ValidationReport:
+    def validate(self, spec: WorkflowSpec, tool_dir: Path, secret_overrides: dict[str, str] | None = None) -> ValidationReport:
         """
         Executes all validation stages on the generated tool directory.
 
@@ -128,6 +128,10 @@ class ValidationPipeline:
         if import_ok:
             # Prepare inputs from spec defaults
             inputs = {p.name: p.example_value for p in spec.parameters}
+            if secret_overrides:
+                for k, v in inputs.items():
+                    if isinstance(v, str) and v in secret_overrides:
+                        inputs[k] = secret_overrides[v]
             
             # Setup failure screenshot path
             self.screenshot_dir.mkdir(parents=True, exist_ok=True)

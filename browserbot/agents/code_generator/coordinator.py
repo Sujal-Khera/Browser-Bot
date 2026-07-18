@@ -36,7 +36,7 @@ class PipelineCoordinator:
         self.pipeline = pipeline
         self.output_dir = Path(output_dir).resolve()
 
-    def run(self, spec: WorkflowSpec) -> ValidationReport:
+    def run(self, spec: WorkflowSpec, secret_overrides: dict[str, str] | None = None) -> ValidationReport:
         """
         Runs the generation and validation loop. Retries up to MAX_RETRIES times.
 
@@ -89,7 +89,7 @@ class PipelineCoordinator:
                 log.error("Failed to compile or write manifest", extra={"error": str(exc)})
 
             # 3. Validate
-            report = self.pipeline.validate(spec, self.output_dir)
+            report = self.pipeline.validate(spec, self.output_dir, secret_overrides=secret_overrides)
             report.to_file(report_path)
 
             # 4. Check success

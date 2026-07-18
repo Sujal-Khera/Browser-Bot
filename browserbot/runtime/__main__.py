@@ -29,6 +29,7 @@ from pathlib import Path
 
 from browserbot.models.package import BrowserBotPackage
 from browserbot.runtime.registry import ClaudeDesktopRegistry, RegistrationError
+from browserbot.orchestrator.self_healing import self_heal_package
 
 
 def _cmd_register(args: argparse.Namespace) -> int:
@@ -88,6 +89,24 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_self_heal(args: argparse.Namespace) -> int:
+    package_dir = Path(args.package)
+    try:
+        healed = self_heal_package(
+            package_dir,
+            registry_config_path=Path(args.registry_config) if args.registry_config else None,
+            force=args.force,
+        )
+        if healed:
+            print(f"[BrowserBot] Package '{package_dir.name}' successfully healed and re-registered.")
+        else:
+            print(f"[BrowserBot] Package '{package_dir.name}' did not require healing (no flag present). Use --force to run anyway.")
+    except Exception as exc:
+        print(f"[error] Self-healing failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m browserbot.runtime",
@@ -118,12 +137,34 @@ def main(argv: list[str] | None = None) -> int:
     # ── list ──────────────────────────────────────────────────────────
     sub.add_parser("list", help="List all tools registered in Claude Desktop config")
 
+    # ── self-heal ─────────────────────────────────────────────────────
+    sh = sub.add_parser("self-heal", help="Trigger self-healing execution on a package")
+    sh.add_argument(
+        "--package",
+        required=True,
+        type=str,
+        help="Path to the BrowserBot package directory",
+    )
+    sh.add_argument(
+        "--registry-config",
+        type=str,
+        default=None,
+        help="Custom path to the Claude config JSON (for testing)",
+    )
+    sh.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Force self-healing even if no failure flag exists",
+    )
+
     args = parser.parse_args(argv)
 
     dispatch = {
         "register": _cmd_register,
         "unregister": _cmd_unregister,
         "list": _cmd_list,
+        "self-heal": _cmd_self_heal,
     }
     return dispatch[args.command](args)
 

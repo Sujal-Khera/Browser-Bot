@@ -1,0 +1,79 @@
+{
+  "package_name": "execute_nobuycart_com",
+  "timestamp": "2026-07-18T03:01:02Z",
+  "iterations": 1,
+  "metrics": {
+    "total_compilation_time_s": 6.992693200001668,
+    "compilation_stages_s": {
+      "stage_1_scrubbing": {
+        "success": true,
+        "message": "Scrub complete",
+        "error": null,
+        "duration_seconds": 0.0008839000001898967
+      },
+      "stage_2_pattern_extraction": {
+        "success": true,
+        "message": "Pattern extraction complete",
+        "error": null,
+        "duration_seconds": 0.0007155000021157321
+      },
+      "stage_3_parameter_confirmation": {
+        "success": true,
+        "message": "Parameters confirmed",
+        "error": null,
+        "duration_seconds": 0.0010997999997925945
+      },
+      "stage_4_ir_generation": {
+        "success": true,
+        "message": "IR Spec generated",
+        "error": null,
+        "duration_seconds": 0.004360100003395928
+      },
+      "stage_5_codegen_validation": {
+        "success": true,
+        "message": "Code compilation and validation passed",
+        "error": null,
+        "duration_seconds": 6.9245848999999
+      },
+      "stage_6_packaging": {
+        "success": true,
+        "message": "Package generated and verified successfully",
+        "error": null,
+        "duration_seconds": 0.045970799998031
+      },
+      "stage_7_claude_registration": {
+        "success": true,
+        "message": "Tool registered in Claude config",
+        "error": null,
+        "duration_seconds": 0.014617199998610886
+      }
+    },
+    "runtime_success_rate": 1.0,
+    "runtime_runs": 1,
+    "runtime_successes": 1,
+    "latency": {
+      "min_s": 7.70586320000001,
+      "max_s": 7.70586320000001,
+      "mean_s": 7.70586320000001,
+      "std_dev_s": 0.0,
+      "raw_runs_s": [
+        7.70586320000001
+      ]
+    },
+    "pii_audit_violations": 0,
+    "pii_audit_details": []
+  },
+  "nfr_targets": {
+    "generation_time_s": 180.0,
+    "runtime_latency_s": 20.0,
+    "reliability_rate": 0.9,
+    "pii_violations": 0
+  },
+  "compliance": {
+    "generation_time_ok": true,
+    "runtime_latency_ok": true,
+    "reliability_rate_ok": true,
+    "pii_violations_ok": true
+  },
+  "overall_compliant": true
+}

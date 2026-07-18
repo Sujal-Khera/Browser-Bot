@@ -1,0 +1,24 @@
+{
+  "package_version": "1.0",
+  "package_name": "execute_practicetestautomation_com",
+  "entry_point": "server.py",
+  "dependencies": [
+    "fastmcp>=3.0.0",
+    "playwright>=1.40.0"
+  ],
+  "claude_config_snippet": {
+    "command": "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\.venv\\Scripts\\python.exe",
+    "args": [
+      "C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\packages\\execute_practice_test_login\\server.py"
+    ],
+    "env": {
+      "BROWSERBOT_HEADLESS": "true"
+    }
+  },
+  "metadata": {
+    "browserbot_version": "0.1.0",
+    "generated_at": "2026-07-18T12:16:48.314168+00:00",
+    "source_session_id": "session_20260718T120828",
+    "site": "practicetestautomation.com"
+  }
+}

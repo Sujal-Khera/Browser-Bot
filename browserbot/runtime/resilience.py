@@ -1,8 +1,9 @@
 """
-browserbot/runtime/resilience.py — Phase 8A: Selector Resilience and Fallbacks.
+browserbot/runtime/resilience.py — Phase 8: Selector Resilience and Network/Timing Resilience.
 
-Implements deterministic selector prioritization and fallback resolution logic
-to ensure browser automation survives cosmetic page and markup changes.
+Implements:
+1. Step 8.1: Prioritized locator fallback strategy (resolve_locator)
+2. Step 8.4: Explicit wait triggers (wait_for_load_state) and action-retry loop with backoff
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ async def resolve_locator(
 ) -> Locator:
     """
     Deterministically resolves a locator using a prioritized fallback selector strategy.
+    Implicitly waits for the page network activity to settle first.
 
     Candidate Priority Order:
     1. ARIA Role (if role/aria_role details are provided)
@@ -33,9 +35,16 @@ async def resolve_locator(
 
     Returns:
         The first locator candidate that successfully matches a visible/attached element.
-        If no candidate resolves within the timeout, defaults to returning the primary candidate
-        to leverage Playwright's native error/timeout reports on subsequent actions.
+        If no candidate resolves within the timeout, defaults to returning the primary candidate.
     """
+    # Step 8.4: Wait for page load state to settle before attempting resolution
+    try:
+        await page.wait_for_load_state("networkidle", timeout=1500)
+        log.info("Page network state settled (networkidle)")
+    except Exception:
+        # Ignore networkidle timeout to handle slow/noisy trackers gracefully
+        pass
+
     strategy = selector.get("strategy")
     value = selector.get("value", "")
     aria_role = selector.get("aria_role")
@@ -128,7 +137,6 @@ async def resolve_locator(
         for name, locator_fn in unique_candidates:
             try:
                 loc = locator_fn(page)
-                # Count elements matching this candidate locator
                 if await loc.count() > 0:
                     log.info("Locator resolved successfully", extra={"selected": name})
                     return loc
@@ -140,10 +148,79 @@ async def resolve_locator(
             break
         await asyncio.sleep(0.1)
 
-    # Default fallback: return the first candidate locator (standard Playwright handling)
+    # Default fallback: return the first candidate locator
     first_name, first_fn = unique_candidates[0]
     log.warning(
         "Fallback locator resolution timed out. Defaulting to first candidate.",
         extra={"default": first_name}
     )
     return first_fn(page)
+
+
+async def resilient_click(
+    page: Page,
+    selector: dict[str, Any],
+    timeout_ms: int = 5000,
+) -> None:
+    """
+    Executes a resilient click action with selector resolution, explicit wait,
+    and action retry-with-backoff to handle transient rendering/network jitter.
+    """
+    backoffs = [0.1, 0.5, 1.0, 2.0]
+    last_exc = None
+
+    for attempt, delay in enumerate(backoffs, start=1):
+        try:
+            # Step 8.1 + 8.4: Resolve locator and check visibility
+            locator = await resolve_locator(page, selector, timeout_ms=1000)
+            await locator.wait_for(state="visible", timeout=1500)
+            await locator.click(timeout=1500)
+            log.info("Resilient click succeeded", extra={"attempt": attempt})
+            return
+        except Exception as exc:
+            last_exc = exc
+            log.warning(
+                "Click failed, retrying click with backoff",
+                extra={"attempt": attempt, "delay": delay, "error": str(exc)}
+            )
+            await asyncio.sleep(delay)
+
+    raise RuntimeError(
+        f"Resilient click failed after {len(backoffs)} retries. "
+        f"Last exception: {last_exc}"
+    )
+
+
+async def resilient_fill(
+    page: Page,
+    selector: dict[str, Any],
+    value: str,
+    timeout_ms: int = 5000,
+) -> None:
+    """
+    Executes a resilient fill action with selector resolution, explicit wait,
+    and action retry-with-backoff to handle transient rendering/network jitter.
+    """
+    backoffs = [0.1, 0.5, 1.0, 2.0]
+    last_exc = None
+
+    for attempt, delay in enumerate(backoffs, start=1):
+        try:
+            # Step 8.1 + 8.4: Resolve locator and check visibility
+            locator = await resolve_locator(page, selector, timeout_ms=1000)
+            await locator.wait_for(state="visible", timeout=1500)
+            await locator.fill(value, timeout=1500)
+            log.info("Resilient fill succeeded", extra={"attempt": attempt})
+            return
+        except Exception as exc:
+            last_exc = exc
+            log.warning(
+                "Fill failed, retrying fill with backoff",
+                extra={"attempt": attempt, "delay": delay, "error": str(exc)}
+            )
+            await asyncio.sleep(delay)
+
+    raise RuntimeError(
+        f"Resilient fill failed after {len(backoffs)} retries. "
+        f"Last exception: {last_exc}"
+    )

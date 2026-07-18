@@ -9,6 +9,7 @@ Produces a detailed diagnostics JSON report on execution (success or failure).
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -85,16 +86,17 @@ class OrchestrationPipeline:
         )
 
         stages_status = {
-            "stage_1_scrubbing": {"success": False, "message": "Pending", "error": None},
-            "stage_2_pattern_extraction": {"success": False, "message": "Pending", "error": None},
-            "stage_3_parameter_confirmation": {"success": False, "message": "Pending", "error": None},
-            "stage_4_ir_generation": {"success": False, "message": "Pending", "error": None},
-            "stage_5_codegen_validation": {"success": False, "message": "Pending", "error": None},
-            "stage_6_packaging": {"success": False, "message": "Pending", "error": None},
-            "stage_7_claude_registration": {"success": False, "message": "Pending", "error": None},
+            "stage_1_scrubbing": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_2_pattern_extraction": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_3_parameter_confirmation": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_4_ir_generation": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_5_codegen_validation": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_6_packaging": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
+            "stage_7_claude_registration": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
         }
         overall_success = False
         failure_reason = None
+        total_start = time.perf_counter()
 
         # Return dict variables
         scrubbed_log = None
@@ -108,6 +110,7 @@ class OrchestrationPipeline:
             # ----------------------------------------------------
             # Stage 1: Load and Scrub raw action log
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_1_scrubbing"]["message"] = "In progress"
             if not raw_action_log_path.exists():
                 raise FileNotFoundError(f"Action log file not found: {raw_action_log_path}")
@@ -119,20 +122,24 @@ class OrchestrationPipeline:
             scrubbed_log = scrub_result.action_log
             stages_status["stage_1_scrubbing"]["success"] = True
             stages_status["stage_1_scrubbing"]["message"] = "Scrub complete"
+            stages_status["stage_1_scrubbing"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 2: Pattern Extraction
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_2_pattern_extraction"]["message"] = "In progress"
             log.info("Running pattern extractor agent")
             extractor = PatternExtractor(dry_run=self.dry_run, backend=self.backend)
             extractor_output = extractor.extract(scrubbed_log)
             stages_status["stage_2_pattern_extraction"]["success"] = True
             stages_status["stage_2_pattern_extraction"]["message"] = "Pattern extraction complete"
+            stages_status["stage_2_pattern_extraction"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 3: Parameter Confirmation (auto-confirm mode)
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_3_parameter_confirmation"]["message"] = "In progress"
             log.info("Confirming parameters (auto-confirm mode)")
             confirmed_output = confirm_parameters(extractor_output, auto_confirm=True)
@@ -145,10 +152,12 @@ class OrchestrationPipeline:
                             setattr(param, k, v)
             stages_status["stage_3_parameter_confirmation"]["success"] = True
             stages_status["stage_3_parameter_confirmation"]["message"] = "Parameters confirmed"
+            stages_status["stage_3_parameter_confirmation"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 4: Generate Workflow Spec IR
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_4_ir_generation"]["message"] = "In progress"
             log.info("Generating Intermediate Representation (IR) workflow spec")
             spec = generate_workflow_spec(scrubbed_log, confirmed_output)
@@ -157,10 +166,12 @@ class OrchestrationPipeline:
             spec.to_file(spec_path)
             stages_status["stage_4_ir_generation"]["success"] = True
             stages_status["stage_4_ir_generation"]["message"] = "IR Spec generated"
+            stages_status["stage_4_ir_generation"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 5: Code Generation, Validation & Bounded Retries
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_5_codegen_validation"]["message"] = "In progress"
             log.info("Running code generation validator pipeline coordinator")
             generator = CodeGenerator(dry_run=self.dry_run, backend=self.backend)
@@ -170,15 +181,34 @@ class OrchestrationPipeline:
                 pipeline=pipeline,
                 output_dir=output_dir,
             )
-            report = coordinator.run(spec)
+            secret_overrides = {}
+            session_id = scrubbed_log.metadata.session_id
+            secrets_path = Path(raw_action_log_path).parent / f"{session_id}_secrets.json"
+            if secrets_path.exists():
+                try:
+                    with open(secrets_path, "r", encoding="utf-8") as f:
+                        secret_overrides = json.load(f)
+                    log.info("Loaded secrets overrides from disk", extra={"path": str(secrets_path)})
+                except Exception as exc:
+                    log.warning("Failed to load secrets mapping from disk", extra={"path": str(secrets_path), "error": str(exc)})
+            
+            if not secret_overrides and scrub_result.value_map:
+                secret_overrides = {
+                    placeholder: plaintext
+                    for plaintext, placeholder in scrub_result.value_map.items()
+                }
+
+            report = coordinator.run(spec, secret_overrides=secret_overrides)
             if not report.overall_success:
                 raise RuntimeError("Validation report status is overall_success = False")
             stages_status["stage_5_codegen_validation"]["success"] = True
             stages_status["stage_5_codegen_validation"]["message"] = "Code compilation and validation passed"
+            stages_status["stage_5_codegen_validation"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 6: Packaging & Installation verification
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             stages_status["stage_6_packaging"]["message"] = "In progress"
             log.info("Compiling installable package")
             packager = Packager()
@@ -188,10 +218,12 @@ class OrchestrationPipeline:
                 raise RuntimeError("Installation integrity verification checks failed.")
             stages_status["stage_6_packaging"]["success"] = True
             stages_status["stage_6_packaging"]["message"] = "Package generated and verified successfully"
+            stages_status["stage_6_packaging"]["duration_seconds"] = time.perf_counter() - t_stage
 
             # ----------------------------------------------------
             # Stage 7: Claude Desktop Registration (optional)
             # ----------------------------------------------------
+            t_stage = time.perf_counter()
             if register:
                 stages_status["stage_7_claude_registration"]["message"] = "In progress"
                 log.info("Registering packaged tool with Claude Desktop")
@@ -199,8 +231,10 @@ class OrchestrationPipeline:
                 registered_config = registry.register(package)
                 stages_status["stage_7_claude_registration"]["success"] = True
                 stages_status["stage_7_claude_registration"]["message"] = "Tool registered in Claude config"
+                stages_status["stage_7_claude_registration"]["duration_seconds"] = time.perf_counter() - t_stage
             else:
                 stages_status["stage_7_claude_registration"]["message"] = "Skipped"
+                stages_status["stage_7_claude_registration"]["duration_seconds"] = 0.0
 
             overall_success = True
             log.info("End-to-end pipeline completed successfully")
@@ -213,6 +247,7 @@ class OrchestrationPipeline:
                     status["success"] = False
                     status["message"] = "Failed during stage execution"
                     status["error"] = failure_reason
+                    status["duration_seconds"] = time.perf_counter() - t_stage
                     break
             raise
         except Exception as exc:
@@ -226,6 +261,7 @@ class OrchestrationPipeline:
                     status["success"] = False
                     status["message"] = f"Failed during stage execution"
                     status["error"] = failure_reason
+                    status["duration_seconds"] = time.perf_counter() - t_stage
                     break
             raise PipelineOrchestrationError(f"Stage execution failed: {exc}") from exc
 
@@ -238,6 +274,7 @@ class OrchestrationPipeline:
                     "pipeline_version": "0.1.0",
                     "execution_timestamp": datetime.now(timezone.utc).isoformat(),
                     "dry_run": self.dry_run,
+                    "total_duration_seconds": time.perf_counter() - total_start,
                     "stages": stages_status,
                     "overall_success": overall_success,
                     "failure_reason": failure_reason,

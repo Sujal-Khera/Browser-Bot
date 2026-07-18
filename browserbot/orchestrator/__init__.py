@@ -10,9 +10,11 @@ from browserbot.orchestrator.pipeline import (
     OrchestrationPipeline,
     PipelineOrchestrationError,
 )
+from browserbot.orchestrator.self_healing import self_heal_package
 
 __all__ = [
     "OrchestrationPipeline",
     "PipelineOrchestrationError",
+    "self_heal_package",
 ]
 
