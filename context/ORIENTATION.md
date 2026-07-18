@@ -961,6 +961,37 @@ This section details the FastAPI orchestration server skeleton, SQLite state dat
 
 *Last updated: run_22 — 2026-07-18*
 
+## 23. Phase v2.2 — Web UI Wizard (run_23)
+
+This section details the static single-page React client wizard serving as the pipeline presentation layer, routing stages, and interactive parameter editing constraints.
+
+### Things You Must Verify Manually
+
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Build React static files: run `npm run build` inside `frontend/` directory | Compiles typescript code and compiles output bundle under `frontend/dist`. |
+| B | Access UI: start the FastAPI server (`python -m browserbot.server`) and open `http://127.0.0.1:8765/` | Confirm the 4-stage wizard opens and visualizes recorded sessions, parameters list, validation checks, and installer snippets. |
+| C | Run API integrations tests: `uv run pytest tests/test_server_app.py -v` | Confirms the new parameter customization endpoints, manual additions, and name regex verification logic. |
+
+### Things You Must Understand
+
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Decoupled Client UI** | `frontend/src/` | The frontend has zero business logic and works solely as a client of the REST API, keeping the backend orchestrator as the single source of truth. |
+| E | **Parameter Editing Schema** | `frontend/src/App.tsx` | Implements interactive parameter editing (rename, reject, optional toggles, manual addition) matching the existing CLI confirmer parameters lifecycle exactly. |
+| F | **Vite Dev Server Proxy** | `frontend/src/api/client.ts` | The API client automatically directs requests to loopback port `8765` when Vite runs on development ports `5173`/`5174`, simplifying local UI iteration. |
+
+### Command Reference
+
+* **Start UI Dev Server**: `npm run dev` (run inside `frontend/`)
+* **Build SPA static bundle**: `npm run build` (run inside `frontend/`)
+* **Start Server serving frontend**: `python -m browserbot.server`
+
+---
+
+*Last updated: run_23 — 2026-07-18*
+
+
 
 
 

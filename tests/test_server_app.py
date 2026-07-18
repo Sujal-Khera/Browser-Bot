@@ -335,3 +335,137 @@ def test_register_endpoint(client: TestClient) -> None:
             pkg_manifest_file.unlink()
         if package_dir.exists():
             package_dir.rmdir()
+
+
+def test_stage_update_endpoint(client: TestClient) -> None:
+    """Verifies that the session stage update endpoint correctly changes stage in DB."""
+    session_id = "session_stage_update_123"
+    db = SessionStateStore()
+    db.create_session(session_id, "recording", {"action_log": "log.json"})
+
+    resp = client.post(f"/sessions/{session_id}/stage?stage=registered")
+    assert resp.status_code == 200
+    assert resp.json()["stage"] == "registered"
+
+    sess = db.get_session(session_id)
+    assert sess["stage"] == "registered"
+
+
+def test_confirm_endpoint_parameter_customization(client: TestClient, tmp_path: Path) -> None:
+    """Verifies that parameter edits (optional, sensitive, custom) save and compile cleanly."""
+    session_id = "session_confirm_cust_123"
+    action_log_file = tmp_path / f"{session_id}.json"
+    action_log_content = {
+        "schema_version": "1.0",
+        "metadata": {
+            "session_id": session_id,
+            "recorded_at": "2026-07-17T12:00:00Z",
+            "site": "example.com",
+            "browserbot_version": "0.1.0",
+            "step_count": 1,
+        },
+        "steps": [
+            {
+                "step_index": 0,
+                "action": "goto",
+                "timestamp_offset": 0.0,
+                "url": "https://example.com",
+                "wait_until": "networkidle",
+            }
+        ]
+    }
+    action_log_file.write_text(json.dumps(action_log_content), encoding="utf-8")
+
+    db = SessionStateStore()
+    db.create_session(session_id, "extracted", {"action_log": str(action_log_file)})
+
+    # Payload matching frontend parameter customizations
+    confirm_payload = {
+        "parameters": [
+            {
+                "name": "user_id_custom", # Renamed
+                "example_value": "custom_user",
+                "log_step_index": 0,
+                "description": "Customized login input",
+                "is_sensitive": True, # Marked sensitive
+                "is_optional": True # Marked optional
+            },
+            {
+                "name": "added_manually", # Manually added
+                "example_value": "dummy",
+                "log_step_index": 0,
+                "description": "Manual addition",
+                "is_sensitive": False,
+                "is_optional": False
+            }
+        ]
+    }
+
+    resp = client.post(f"/sessions/{session_id}/confirm", json=confirm_payload)
+    assert resp.status_code == 200
+    
+    # Load generated spec and verify changes
+    sess = db.get_session(session_id)
+    spec_path = Path(sess["artifact_paths"]["workflow_spec"])
+    assert spec_path.exists()
+    
+    spec_content = json.loads(spec_path.read_text(encoding="utf-8"))
+    params = spec_content["parameters"]
+    assert len(params) == 2
+    
+    p1 = next(p for p in params if p["name"] == "user_id_custom")
+    assert p1["is_sensitive"] is True
+    assert p1["is_optional"] is True
+    assert p1["example_value"] == "custom_user"
+    
+    p2 = next(p for p in params if p["name"] == "added_manually")
+    assert p2["is_sensitive"] is False
+    assert p2["is_optional"] is False
+
+
+def test_confirm_endpoint_invalid_names(client: TestClient, tmp_path: Path) -> None:
+    """Verifies that invalid parameter names are rejected by schema validation."""
+    session_id = "session_confirm_invalid_123"
+    action_log_file = tmp_path / f"{session_id}.json"
+    action_log_content = {
+        "schema_version": "1.0",
+        "metadata": {
+            "session_id": session_id,
+            "recorded_at": "2026-07-17T12:00:00Z",
+            "site": "example.com",
+            "browserbot_version": "0.1.0",
+            "step_count": 1,
+        },
+        "steps": [
+            {
+                "step_index": 0,
+                "action": "goto",
+                "timestamp_offset": 0.0,
+                "url": "https://example.com",
+                "wait_until": "networkidle",
+            }
+        ]
+    }
+    action_log_file.write_text(json.dumps(action_log_content), encoding="utf-8")
+
+    db = SessionStateStore()
+    db.create_session(session_id, "extracted", {"action_log": str(action_log_file)})
+
+    # Invalid parameter name with uppercase / spaces / starting with number
+    confirm_payload = {
+        "parameters": [
+            {
+                "name": "Invalid-Name",
+                "example_value": "val",
+                "log_step_index": 0,
+                "description": "Invalid parameter name",
+                "is_sensitive": False,
+                "is_optional": False
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        client.post(f"/sessions/{session_id}/confirm", json=confirm_payload)
+    assert "Workflow Spec validation failed" in str(exc_info.value)
+

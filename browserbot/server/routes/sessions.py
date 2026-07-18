@@ -353,3 +353,14 @@ async def package_tool(id: str, req: PackageRequest):
     db.update_session(id, "packaged", paths)
 
     return json.loads(Path(paths["browserbot_package"]).read_text(encoding="utf-8"))
+
+
+@router.post("/{id}/stage")
+async def update_session_stage(id: str, stage: str):
+    """Updates the stage of the session in the database state."""
+    db = SessionStateStore()
+    sess = db.get_session(id)
+    if not sess:
+        raise HTTPException(status_code=404, detail=f"Session {id} not found")
+    db.update_session(id, stage, sess["artifact_paths"])
+    return db.get_session(id)
