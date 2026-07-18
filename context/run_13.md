@@ -54,7 +54,7 @@ python -m browserbot.runtime register --package packages/execute_nobuycart_com
 ### Dry-run output (verified)
 ```
 [dry-run] The following entry would be written to:
-  C:\Users\hp\AppData\Roaming\Claude\claude_desktop_config.json
+  C:\Users\<username>\AppData\Roaming\Claude\claude_desktop_config.json
 
 {
   "mcpServers": {

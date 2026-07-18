@@ -310,8 +310,8 @@ Let's walk through the exact steps to automate a new website: **`https://example
   [OK] Registered package 'execute_example_com' in Claude Desktop configuration.
   ```
 * **Files Created/Modified:**
-  * Modifies: `C:\Users\hp\AppData\Roaming\Claude\claude_desktop_config.json`
-  * Creates: `C:\Users\hp\AppData\Roaming\Claude\claude_desktop_config.json.bak_<timestamp>` (for safety)
+  * Modifies: `C:\Users\<username>\AppData\Roaming\Claude\claude_desktop_config.json` (or equivalent `%APPDATA%\Claude\claude_desktop_config.json`)
+  * Creates: `C:\Users\<username>\AppData\Roaming\Claude\claude_desktop_config.json.bak_<timestamp>` (for safety)
 * **Common Mistakes:** Registering with a folder path containing spaces without quotes, or not restarting Claude Desktop after executing the registration CLI.
 
 ---

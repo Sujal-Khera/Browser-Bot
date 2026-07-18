@@ -9,7 +9,7 @@ This playbook provides step-by-step instructions to manually execute, verify, an
 Before executing any phase, ensure the baseline environment is ready.
 
 ### 1. Python & Dependencies
-1. Open PowerShell in the project root: `c:\Users\hp\OneDrive\Desktop\BrowserBot`
+1. Open PowerShell in the project root directory.
 2. Activate the virtual environment:
    ```powershell
    .venv\Scripts\activate
