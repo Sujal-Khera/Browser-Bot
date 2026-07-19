@@ -67,8 +67,11 @@ async def run_workflow(
                 extracted_outputs["{{ out.name }}"] = f"Extraction failed: {str(ext_err)}"
             {% endfor %}
 
-            # Step 6.4: return human-readable prose Claude can relay conversationally
-            return format_success(extracted_outputs)
+            # Step 6.4 / v2.4.1: return human-readable prose Claude can relay conversationally.
+            # style="prose" is used for newly generated tools (v2.4+).
+            # Previously packaged tools call format_success() without this argument
+            # and continue to use the bullet-list default — backward compatible.
+            return format_success(extracted_outputs, style="prose")
 
         except Exception as exc:
             log.error("Workflow step execution failed", extra={"error": str(exc)})

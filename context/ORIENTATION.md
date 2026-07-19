@@ -24,7 +24,7 @@ The columns mean:
 
 | # | What to do | Why it matters |
 |---|-----------|----------------|
-| A | Run `python scripts/verify_env.py --no-ollama` and confirm you see `6/6 checks passed` | This is your baseline. If any dependency is missing, every later phase will fail silently |
+| A | Run `python -m browserbot doctor --no-ollama` (or `python scripts/verify_env.py --no-ollama`) and confirm all checks pass | This is your baseline. If any dependency or directory is missing, every later phase will fail silently |
 | B | Run `python -m browserbot.recorder --demo` and confirm it prints `Example Domain` | Verifies Playwright Chromium works. If it fails, fix Playwright before touching anything else |
 | C | Open `tests/fixtures/ground_truth_script.py` and read it top to bottom | This is the *hand-written* baseline the entire project measures itself against. You must understand what it does |
 
@@ -989,14 +989,29 @@ This section details the static single-page React client wizard serving as the p
 
 ---
 
-*Last updated: run_23 — 2026-07-18*
+## 24. Phase v2.2 — Collapsible Developer Console Drawer (run_24)
 
+### 24.1 Things You Must Verify Manually
 
+| # | What to do | Why it matters |
+|---|-----------|----------------|
+| A | Start the dev server, select or create a session, and run `GET /sessions/{id}/logs` | Verifies that telemetry logs are capturing and streaming successfully via FastAPI's chunked SSE endpoint. |
+| B | Run compiler/validation generation and check if the console drawer auto-expands on error | Confirms the visual auto-expand safeguard operates as designed when fatal errors occur in any pipeline stage. |
+| C | Try resizing the drawer vertically by dragging the top edge | Ensures resizable layout height bounds (150px - 600px) feel responsive and smooth. |
 
+### 24.2 Things You Must Understand
 
+| # | Concept | Where it is | Why it matters |
+|---|---------|-------------|----------------|
+| D | **Contextual Logging Interception** | `browserbot/server/routes/sessions.py` (`capture_session_logs`) | Avoids global side-effects by attaching a transient `FileHandler` to the root `browserbot` logger only during active pipeline stages, writing records directly to `{id}_telemetry.log`. |
+| E | **Intelligent Auto-Scroll Pause** | `frontend/src/App.tsx` (`handleScroll`) | Auto-scroll automatically pauses when the user scrolls upward inside the console terminal, avoiding frustrating viewport jumping during active runs. |
+| F | **Graceful EventSource Termination** | `browserbot/server/routes/sessions.py` (`stream_session_logs`) | The generator streamer terminates automatically if the session transitions out of active stage execution states, conserving server resources. |
 
+### Command Reference
 
+* **Stream active telemetry logs**: `GET http://localhost:8765/sessions/{id}/logs` (Server-Sent Events)
+* **Toggle drawer via shortcut**: Press `Ctrl + \` inside the Web UI dashboard workspace.
 
+---
 
-
-
+*Last updated: run_24 — 2026-07-18*

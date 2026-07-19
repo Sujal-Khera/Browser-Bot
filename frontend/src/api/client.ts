@@ -157,4 +157,8 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
+
+  getLogsUrl(id: string): string {
+    return `${getBaseUrl()}/sessions/${id}/logs`;
+  },
 };

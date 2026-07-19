@@ -76,12 +76,31 @@ async def test_resilient_click_permanent_failure() -> None:
     mock_locator = MagicMock()
     mock_locator.wait_for = AsyncMock()
     mock_locator.click = AsyncMock(side_effect=Exception("Permanent error"))
+    mock_locator.evaluate = AsyncMock(side_effect=Exception("JS click failed"))
 
     with patch("browserbot.runtime.resilience.resolve_locator", return_value=mock_locator), \
          patch("asyncio.sleep", AsyncMock()):
         
         with pytest.raises(RuntimeError, match="Resilient click failed after 4 retries"):
             await resilient_click(mock_page, {"value": "btn"})
+
+
+@pytest.mark.asyncio
+async def test_resilient_click_static_text_element_success() -> None:
+    """Verifies that clicking a non-interactive static text element (p, span, div) verifies presence in DOM and succeeds."""
+    mock_page = MagicMock()
+    mock_locator = MagicMock(spec=["click", "wait_for", "count", "scroll_into_view_if_needed", "evaluate"])
+    mock_locator.count = AsyncMock(return_value=1)
+    mock_locator.wait_for = AsyncMock()
+    mock_locator.scroll_into_view_if_needed = AsyncMock()
+    mock_locator.click = AsyncMock(side_effect=Exception("Non-interactive element"))
+    # evaluate returns tag name "p"
+    mock_locator.evaluate = AsyncMock(side_effect=[Exception("JS click failed"), "p"])
+
+    with patch("browserbot.runtime.resilience.resolve_locator", return_value=mock_locator), \
+         patch("asyncio.sleep", AsyncMock()):
+        await resilient_click(mock_page, {"strategy": "text", "value": "Tracking updates are"})
+        assert mock_locator.evaluate.call_count == 2
 
 
 @pytest.mark.asyncio

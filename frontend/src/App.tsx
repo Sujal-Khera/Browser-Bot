@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Play,
   Check,
@@ -12,6 +12,11 @@ import {
   CheckCircle2,
   ChevronRight,
   ShieldAlert,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "./api/client";
 import type { Session, ExtractedParameter, ValidationReport, BrowserBotPackage } from "./api/client";
@@ -43,6 +48,194 @@ export default function App() {
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
   const [packageMetadata, setPackageMetadata] = useState<BrowserBotPackage | null>(null);
   const [registrationConfig, setRegistrationConfig] = useState<Record<string, any> | null>(null);
+
+  // Live WebSocket Stage-Events Streaming States
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  const [failureScreenshot, setFailureScreenshot] = useState<string | null>(null);
+
+  // Helper to fetch latest stage status from event list
+  const getStageStatus = (stageName: string) => {
+    const matching = liveEvents.filter((e) => e.stage === stageName);
+    if (matching.length === 0) return { status: "pending", message: "Waiting to start..." };
+    return matching[matching.length - 1];
+  };
+
+  // Developer Console Drawer States
+  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [consoleHeight, setConsoleHeight] = useState(240);
+  const [isResizing, setIsResizing] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [isScrollPaused, setIsScrollPaused] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to SSE logs for the selected session
+  useEffect(() => {
+    if (!selectedSession) {
+      setConsoleLogs([]);
+      setDuration(0);
+      setIsScrollPaused(false);
+      return;
+    }
+
+    setConsoleLogs([]);
+    setDuration(0);
+    setIsScrollPaused(false);
+
+    const eventSource = new EventSource(api.getLogsUrl(selectedSession.session_id));
+    
+    eventSource.onmessage = (event) => {
+      const data = event.data;
+      if (data) {
+        setConsoleLogs((prev) => [...prev, data]);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE logs stream connection error, closing...", err);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [selectedSession?.session_id]);
+
+  // Subscribe to WebSocket stage events for the selected session
+  useEffect(() => {
+    if (!selectedSession?.session_id) {
+      setLiveEvents([]);
+      setFailureScreenshot(null);
+      return;
+    }
+
+    setLiveEvents([]);
+    setFailureScreenshot(null);
+
+    // Compute ws url dynamically mapping protocol and host
+    const logsUrl = api.getLogsUrl(selectedSession.session_id);
+    const url = new URL(logsUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = `/sessions/ws/sessions/${selectedSession.session_id}`;
+    const wsUrl = url.toString();
+
+    console.log("Connecting to WebSocket event stream:", wsUrl);
+    const socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload) {
+          setLiveEvents((prev) => {
+            // Keep unique events by stage and status to avoid duplication
+            const filtered = prev.filter(
+              (e) => !(e.stage === payload.stage && e.status === payload.status)
+            );
+            return [...filtered, payload];
+          });
+
+          // Check if metadata contains base64 encoded screenshot on validation failure
+          if (payload.metadata && payload.metadata.screenshot) {
+            setFailureScreenshot(payload.metadata.screenshot);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to parse stage event websocket message", err);
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.error("WebSocket stage events stream error", err);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket stage events stream closed");
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [selectedSession?.session_id]);
+
+  // Track session timer duration
+  useEffect(() => {
+    let interval: any;
+    const activeStages = ["recording", "extracting", "confirming", "generating", "packaging"];
+    if (selectedSession && activeStages.includes(selectedSession.stage)) {
+      interval = setInterval(() => {
+        setDuration((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [selectedSession?.stage, selectedSession?.session_id]);
+
+  // Auto-expand logs drawer on error (height 300px per Design Brief Sec 7)
+  useEffect(() => {
+    if (selectedSession?.stage === "failed" || (validationReport && !validationReport.overall_success)) {
+      setIsConsoleOpen(true);
+      setConsoleHeight(300);
+    }
+  }, [selectedSession?.stage, validationReport]);
+
+  // Handle vertical resizing of log drawer (clamped 150px - 500px per Design Brief Sec 8)
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newHeight = window.innerHeight - e.clientY;
+      if (newHeight >= 150 && newHeight <= 500) {
+        setConsoleHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
+  // Auto-scroll logs list
+  useEffect(() => {
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [consoleLogs, autoScroll]);
+
+  // Toggle console drawer via Ctrl + \
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "\\") {
+        e.preventDefault();
+        setIsConsoleOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 15;
+    if (isAtBottom) {
+      setAutoScroll(true);
+      setIsScrollPaused(false);
+    } else {
+      setAutoScroll(false);
+      setIsScrollPaused(true);
+    }
+  };
 
   // Poll for recording progress
   useEffect(() => {
@@ -224,6 +417,8 @@ export default function App() {
     if (!selectedSession) return;
     setLoading(true);
     setError(null);
+    setLiveEvents([]);
+    setFailureScreenshot(null);
     try {
       const report = await api.generateCode(selectedSession.session_id);
       setValidationReport(report);
@@ -717,22 +912,73 @@ export default function App() {
 
                 {/* Compilation progress or results view */}
                 {!validationReport ? (
-                  <div className="py-12 border-2 border-dashed border-[var(--border)] rounded-2xl flex flex-col items-center justify-center space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/20 flex items-center justify-center text-purple-600">
-                      <Terminal className="w-6 h-6" />
+                  loading ? (
+                    <div className="space-y-6 text-left animate-fade-in">
+                      <div className="flex items-center space-x-3 p-4 bg-purple-50/50 dark:bg-purple-950/10 border border-purple-200 dark:border-purple-950/50 rounded-xl">
+                        <RefreshCw className="w-5 h-5 animate-spin text-purple-600" />
+                        <div>
+                          <h4 className="font-semibold text-[var(--text-h)]">Compiling & Validating</h4>
+                          <p className="text-xs text-gray-400">Executing verification pipeline stages in real-time...</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {[
+                          { id: "stage_5_file_existence", label: "Check generated files existence" },
+                          { id: "stage_5_compilation", label: "Python syntax compilation" },
+                          { id: "stage_5_import_check", label: "FastMCP module imports" },
+                          { id: "stage_5_runtime_dry_run", label: "Runtime dry-run trial execution" },
+                        ].map((stage, idx) => {
+                          const ev = getStageStatus(stage.id);
+                          return (
+                            <div
+                              key={idx}
+                              className="p-4 rounded-xl border border-[var(--border)] bg-gray-50/30 dark:bg-gray-800/10 flex items-center justify-between transition"
+                            >
+                              <div className="space-y-1">
+                                <span className="text-sm font-medium text-[var(--text-h)] block">{stage.label}</span>
+                                <span className="text-xs text-gray-400 block">{ev.message}</span>
+                              </div>
+                              <div className="flex items-center">
+                                {ev.status === "in_progress" && (
+                                  <RefreshCw className="w-4 h-4 animate-spin text-purple-600" />
+                                )}
+                                {ev.status === "success" && (
+                                  <Check className="w-4 h-4 text-green-600" />
+                                )}
+                                {ev.status === "failed" && (
+                                  <X className="w-4 h-4 text-red-600" />
+                                )}
+                                {ev.status === "skipped" && (
+                                  <Clock className="w-4 h-4 text-gray-400" />
+                                )}
+                                {ev.status === "pending" && (
+                                  <Clock className="w-4 h-4 text-gray-300" />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="space-y-1 text-center">
-                      <h4 className="font-medium text-[var(--text-h)]">Ready to Compile</h4>
-                      <p className="text-xs text-gray-400">Click compile to run code generation and sandboxed validation trials.</p>
+                  ) : (
+                    <div className="py-12 border-2 border-dashed border-[var(--border)] rounded-2xl flex flex-col items-center justify-center space-y-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/20 flex items-center justify-center text-purple-600">
+                        <Terminal className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1 text-center">
+                        <h4 className="font-medium text-[var(--text-h)]">Ready to Compile</h4>
+                        <p className="text-xs text-gray-400">Click compile to run code generation and sandboxed validation trials.</p>
+                      </div>
+                      <button
+                        onClick={handleGenerateCode}
+                        disabled={loading}
+                        className="py-2.5 px-6 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-medium flex items-center space-x-2 transition cursor-pointer"
+                      >
+                        <span>Compile & Validate</span>
+                      </button>
                     </div>
-                    <button
-                      onClick={handleGenerateCode}
-                      disabled={loading}
-                      className="py-2.5 px-6 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-medium flex items-center space-x-2 transition cursor-pointer"
-                    >
-                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <span>Compile & Validate</span>}
-                    </button>
-                  </div>
+                  )
                 ) : (
                   <div className="space-y-6 animate-fade-in text-left">
                     <div className="flex items-center justify-between p-4 rounded-xl border bg-gray-50 dark:bg-gray-800/40 border-[var(--border)]">
@@ -783,25 +1029,111 @@ export default function App() {
                       ))}
                     </div>
 
-                    {/* Retry details if failed */}
-                    {!validationReport.overall_success && (
-                      <div className="p-4 bg-red-50/50 dark:bg-red-950/10 border border-red-200 dark:border-red-950 rounded-xl space-y-3">
-                        <span className="text-sm font-semibold text-red-700 dark:text-red-400 flex items-center space-x-1.5">
-                          <AlertCircle className="w-4 h-4" />
-                          <span>Validation Failures Detected</span>
-                        </span>
-                        <pre className="text-xs font-mono bg-white dark:bg-gray-900 border border-red-100 dark:border-red-950/50 p-3 rounded-lg overflow-x-auto text-red-600">
-                          {validationReport.runtime_dry_run?.message || "Verify logs for details."}
-                        </pre>
-                        <button
-                          onClick={handleGenerateCode}
-                          disabled={loading}
-                          className="py-1.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition cursor-pointer"
-                        >
-                          Retry Generator Loop
-                        </button>
+                    {/* Failure diagnostic screenshot */}
+                    {failureScreenshot && (
+                      <div className="space-y-2">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Sandbox Execution Failure Screenshot</span>
+                        <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-800">
+                          <img
+                            src={`data:image/png;base64,${failureScreenshot}`}
+                            alt="Failure diagnostic screenshot"
+                            className="w-full h-auto object-contain max-h-[300px] border-b border-[var(--border)]"
+                          />
+                          <div className="p-3 text-xs text-gray-400 bg-white dark:bg-gray-900 flex justify-between items-center">
+                            <span>Captured automatically during failed dry-run trial.</span>
+                            <button
+                              onClick={() => {
+                                const newTab = window.open();
+                                if (newTab) {
+                                  newTab.document.write(`<img src="data:image/png;base64,${failureScreenshot}" style="max-width:100%; height:auto;" />`);
+                                }
+                              }}
+                              className="text-purple-600 hover:text-purple-700 font-medium transition cursor-pointer"
+                            >
+                              View Fullscreen
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
+
+                    {/* Failure diagnostics — shown when any stage fails */}
+                    {!validationReport.overall_success && (() => {
+                      // Determine which stages failed to show per-stage diagnostics
+                      const stageDetails = [
+                        { key: "file_existence", label: "Script Existence", data: validationReport.file_existence },
+                        { key: "compilation", label: "Syntax Compilation", data: validationReport.compilation },
+                        { key: "import_check", label: "FastMCP Imports", data: validationReport.import_check },
+                        { key: "runtime_dry_run", label: "Runtime Dry-Run", data: validationReport.runtime_dry_run },
+                      ];
+                      const failedStages = stageDetails.filter(s => !s.data?.success);
+                      const passedStages = stageDetails.filter(s => s.data?.success);
+                      const isPartialFailure = passedStages.length > 0 && failedStages.length > 0;
+
+                      return (
+                        <div className="space-y-3">
+                          {/* Header row — warning vs full failure */}
+                          <div className={`flex items-start space-x-2.5 p-3 rounded-xl border ${
+                            isPartialFailure
+                              ? "bg-amber-50/60 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900/50"
+                              : "bg-red-50/50 dark:bg-red-950/10 border-red-200 dark:border-red-950"
+                          }`}>
+                            {isPartialFailure
+                              ? <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                              : <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                            }
+                            <div>
+                              <p className={`text-sm font-semibold ${isPartialFailure ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400"}`}>
+                                {isPartialFailure
+                                  ? `Partial Failure — ${passedStages.length} of 4 stages passed`
+                                  : "Validation Failed — All stages could not be completed"}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                Review the failing stage below and follow the suggested recovery action.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Per-stage failure detail */}
+                          {failedStages.map((stage, idx) => (
+                            <div key={idx} className="border border-red-100 dark:border-red-950/50 rounded-xl overflow-hidden">
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-red-50/40 dark:bg-red-950/10 border-b border-red-100 dark:border-red-950/50">
+                                <div className="flex items-center space-x-2">
+                                  <X className="w-3.5 h-3.5 text-red-500" />
+                                  <span className="text-xs font-semibold text-red-700 dark:text-red-400 uppercase tracking-wider">{stage.label}</span>
+                                </div>
+                                <span className="text-xs text-red-400 font-mono">FAILED</span>
+                              </div>
+                              {stage.data?.message && (
+                                <div className="p-3 bg-white dark:bg-gray-900">
+                                  <pre className="text-xs font-mono text-red-600 dark:text-red-400 whitespace-pre-wrap break-words leading-relaxed">
+                                    {stage.data.message}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+
+                          {/* Recovery actions */}
+                          <div className="flex items-center justify-between pt-1">
+                            <p className="text-xs text-gray-400">
+                              {failedStages.some(s => s.key === "runtime_dry_run")
+                                ? "The dry-run failed. Check the console logs or try regenerating."
+                                : failedStages.some(s => s.key === "compilation" || s.key === "import_check")
+                                ? "Code generation produced invalid Python. Retry to attempt a self-corrected run."
+                                : "Verify the recorded session has valid actions, then retry."}
+                            </p>
+                            <button
+                              onClick={handleGenerateCode}
+                              disabled={loading}
+                              className="py-1.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition cursor-pointer shrink-0 ml-4 disabled:opacity-50"
+                            >
+                              Retry Generator Loop
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {validationReport.overall_success && (
                       <div className="flex justify-end pt-4 border-t border-[var(--border)]">
@@ -880,6 +1212,187 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Developer Console Drawer Component */}
+      {selectedSession && (
+        <div 
+          className="console-drawer border-t border-[var(--border)] bg-[var(--bg)] text-[var(--text)] transition-all duration-200 select-none flex flex-col w-full relative"
+          style={{ height: isConsoleOpen ? `${consoleHeight}px` : "36px" }}
+        >
+          {/* Resize Handle (only visible when expanded) */}
+          {isConsoleOpen && (
+            <div 
+              className="console-resizer h-1 cursor-ns-resize hover:bg-[var(--accent)] transition-colors w-full absolute top-0 left-0 right-0 z-50"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizing(true);
+              }}
+            />
+          )}
+          
+          {/* Header Panel */}
+          <div 
+            className="console-header flex items-center justify-between px-4 h-8 border-b border-[var(--border)] select-none cursor-pointer text-xs font-medium text-[var(--text)] bg-[var(--bg)] hover:text-[var(--text-h)] transition-colors w-full"
+            onClick={() => setIsConsoleOpen(!isConsoleOpen)}
+          >
+            <div className="flex items-center space-x-4">
+              <span className="flex items-center space-x-1.5 font-semibold text-[var(--text-h)]">
+                <Terminal className="w-3.5 h-3.5 text-[var(--text)]" />
+                <span>Console</span>
+              </span>
+              
+              {/* Counters */}
+              <div className="flex items-center space-x-2 text-[10px]" onClick={(e) => e.stopPropagation()}>
+                {consoleLogs.filter(line => line.includes("[ERROR]")).length > 0 && (
+                  <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-400 font-mono">
+                    <AlertCircle className="w-2.5 h-2.5" />
+                    <span>{consoleLogs.filter(line => line.includes("[ERROR]")).length}</span>
+                  </span>
+                )}
+                {consoleLogs.filter(line => line.includes("[WARNING]")).length > 0 && (
+                  <span className="flex items-center space-x-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 font-mono">
+                    <AlertTriangle className="w-2.5 h-2.5" />
+                    <span>{consoleLogs.filter(line => line.includes("[WARNING]")).length}</span>
+                  </span>
+                )}
+                {consoleLogs.length > 0 && (
+                  <span className="text-[var(--text)] font-mono">
+                    {consoleLogs.length} logs
+                  </span>
+                )}
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center space-x-1.5 text-[10px] text-[var(--text)] font-mono" onClick={(e) => e.stopPropagation()}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  selectedSession.stage === "failed" ? "bg-red-500 animate-pulse" :
+                  ["recording", "extracting", "confirming", "generating", "packaging"].includes(selectedSession.stage) ? "bg-[var(--accent)] animate-pulse" :
+                  "bg-green-500"
+                }`} />
+                <span className="capitalize">{selectedSession.stage}</span>
+              </div>
+
+              {/* Execution Duration */}
+              {duration > 0 && (
+                <span className="flex items-center space-x-1 text-[10px] text-[var(--text)] font-mono" onClick={(e) => e.stopPropagation()}>
+                  <Clock className="w-3 h-3 text-[var(--text)]" />
+                  <span>{duration}s</span>
+                </span>
+              )}
+            </div>
+            
+            {/* Console controls */}
+            <div className="flex items-center space-x-3" onClick={(e) => e.stopPropagation()}>
+              {isConsoleOpen && (
+                <>
+                  {/* Auto-Scroll Toggle */}
+                  <label className="flex items-center space-x-1.5 cursor-pointer text-[var(--text)] hover:text-[var(--text-h)] text-[10px] font-mono select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={autoScroll}
+                      onChange={(e) => {
+                        setAutoScroll(e.target.checked);
+                        if (e.target.checked) setIsScrollPaused(false);
+                      }}
+                      className="rounded border-[var(--border)] bg-transparent text-[var(--accent)] focus:ring-[var(--accent)]/20 w-3 h-3 cursor-pointer"
+                    />
+                    <span>Auto-scroll</span>
+                  </label>
+                  
+                  {/* Clear logs */}
+                  <button 
+                    onClick={() => {
+                      setConsoleLogs([]);
+                      setIsScrollPaused(false);
+                    }}
+                    className="p-1 text-[var(--text)] hover:text-red-500 rounded transition-colors cursor-pointer"
+                    title="Clear Console"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+              
+              {/* Toggle Expand Icon */}
+              <button 
+                onClick={() => setIsConsoleOpen(!isConsoleOpen)}
+                className="p-1 text-[var(--text)] hover:text-[var(--text-h)] rounded transition-colors cursor-pointer"
+              >
+                {isConsoleOpen ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronUp className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+          
+          {/* Logs Terminal Area */}
+          {isConsoleOpen && (
+            <div className="flex-1 min-h-0 relative flex flex-col bg-[var(--code-bg)]">
+              <div 
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-normal select-text select-all whitespace-pre-wrap text-left space-y-1.5 scrollbar-thin w-full text-[var(--text-h)]"
+              >
+                {consoleLogs.length === 0 ? (
+                  <div className="text-[var(--text)] opacity-60 italic py-2 px-1">Console is clear. Telemetry inactive.</div>
+                ) : (
+                  consoleLogs.map((logLine, idx) => {
+                    // Determine line color and styles based on keywords
+                    let colorClass = "text-[var(--text)] opacity-80";
+                    if (logLine.includes("[ERROR]")) {
+                      colorClass = "text-red-600 dark:text-red-400 font-semibold";
+                    } else if (logLine.includes("[WARNING]")) {
+                      colorClass = "text-amber-600 dark:text-amber-400";
+                    } else if (logLine.includes("[SUCCESS]") || logLine.includes("completed successfully") || logLine.includes("passed") || logLine.includes("[INFO] Console initialized")) {
+                      colorClass = "text-green-600 dark:text-green-400";
+                    } else if (logLine.includes("[INFO]")) {
+                      colorClass = "text-[var(--text-h)] opacity-90";
+                    }
+                    
+                    // Parse timestamp and format nicely if present
+                    const timestampMatch = logLine.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
+                    if (timestampMatch) {
+                      const time = timestampMatch[1];
+                      const content = logLine.substring(time.length + 2).trim();
+                      return (
+                        <div key={idx} className="flex items-start py-0.5 border-b border-[var(--border)]/10 hover:bg-[var(--border)]/20 font-mono">
+                          <span className="text-[var(--text)] opacity-40 mr-3 flex-shrink-0 select-none">{time}</span>
+                          <span className={`flex-1 break-all ${colorClass}`}>{content}</span>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div key={idx} className={`py-0.5 break-all font-mono ${colorClass}`}>
+                        {logLine}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              
+              {/* Resume Auto-scroll Banner */}
+              {isScrollPaused && (
+                <button 
+                  onClick={() => {
+                    setAutoScroll(true);
+                    setIsScrollPaused(false);
+                    if (scrollRef.current) {
+                      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                    }
+                  }}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-[var(--bg)] border border-[var(--border)] text-[10px] text-[var(--text-h)] font-mono rounded-md hover:bg-[var(--code-bg)] transition-colors cursor-pointer shadow-sm z-50 flex items-center space-x-1.5"
+                >
+                  <RefreshCw className="w-3 h-3 animate-spin text-[var(--text)]" />
+                  <span>Resume Auto-scroll</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

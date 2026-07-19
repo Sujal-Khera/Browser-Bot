@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from browserbot.agents.code_generator.generator import CodeGenerator
 from browserbot.agents.validator.pipeline import ValidationPipeline
@@ -17,6 +18,7 @@ from browserbot.logging import get_logger
 from browserbot.models.correction_payload import CorrectionPayload
 from browserbot.models.validation_report import ValidationReport
 from browserbot.models.workflow_spec import WorkflowSpec
+from browserbot.models.stage_event import StageEvent
 
 log = get_logger(__name__)
 
@@ -31,10 +33,12 @@ class PipelineCoordinator:
         generator: CodeGenerator,
         pipeline: ValidationPipeline,
         output_dir: Path,
+        on_stage_event: Callable[[StageEvent], None] | None = None,
     ) -> None:
         self.generator = generator
         self.pipeline = pipeline
         self.output_dir = Path(output_dir).resolve()
+        self.on_stage_event = on_stage_event
 
     def run(self, spec: WorkflowSpec, secret_overrides: dict[str, str] | None = None) -> ValidationReport:
         """
@@ -89,7 +93,7 @@ class PipelineCoordinator:
                 log.error("Failed to compile or write manifest", extra={"error": str(exc)})
 
             # 3. Validate
-            report = self.pipeline.validate(spec, self.output_dir, secret_overrides=secret_overrides)
+            report = self.pipeline.validate(spec, self.output_dir, secret_overrides=secret_overrides, on_stage_event=self.on_stage_event)
             report.to_file(report_path)
 
             # 4. Check success

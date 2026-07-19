@@ -190,8 +190,10 @@ class CodeGenerator:
             raise
 
         # 3. Render Jinja2 template
+        from browserbot.agents.code_generator.manifest import derive_tool_name
+
         server_name = f"BrowserBot {spec.workflow.site.title()}"
-        tool_name = f"execute_{spec.workflow.site.replace('.', '_').replace('-', '_')}"
+        tool_name = derive_tool_name(spec.workflow.site, spec.workflow.description)
 
         try:
             template = self._jinja_env.get_template(TEMPLATE_FILE)

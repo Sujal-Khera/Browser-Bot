@@ -56,7 +56,8 @@ def test_manifest_generation_success() -> None:
 
     assert isinstance(manifest, MCPToolManifest)
     assert manifest.schema_version == "1.0"
-    assert manifest.mcp_tool_name == "execute_example_com"
+    assert manifest.mcp_tool_name.startswith("execute_")
+    assert "example_com" in manifest.mcp_tool_name
     assert manifest.description == "Search for a query on example.com"
     
     # Check parameters schema
@@ -128,3 +129,16 @@ def test_manifest_validator_rejects_invalid_manifest() -> None:
     errors = validator.validate(bad_data_2)
     assert len(errors) > 0
     assert any("schema_version" in err for err in errors)
+
+
+def test_derive_tool_name_with_and_without_hint() -> None:
+    from browserbot.agents.code_generator.manifest import derive_tool_name
+
+    # Default description / No hint
+    assert derive_tool_name("nobuycart.com", None) == "execute_nobuycart_com"
+    assert derive_tool_name("nobuycart.com", "Automated browser workflow on nobuycart.com") == "execute_nobuycart_com"
+
+    # Custom hint
+    assert derive_tool_name("nobuycart.com", "Order status lookup") == "execute_order_status_lookup_nobuycart_com"
+    assert derive_tool_name("example.com", "Track Package #123") == "execute_track_package_123_example_com"
+

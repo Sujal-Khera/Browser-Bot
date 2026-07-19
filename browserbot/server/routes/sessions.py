@@ -15,7 +15,37 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket
+from fastapi.responses import StreamingResponse
+import contextlib
+import asyncio
+
+
+@contextlib.contextmanager
+def capture_session_logs(session_id: str, anchor_file_path: Path):
+    """
+    Temporary attaches a FileHandler to the root 'browserbot' logger to intercept
+    log output during pipeline stages and output them to a session-specific console log.
+    """
+    log_dir = Path(anchor_file_path).parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"{session_id}_telemetry.log"
+    
+    # Create handler formatted for high-density reading: [HH:MM:SS] [LEVEL] message
+    file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    file_formatter = logging.Formatter(
+        fmt="[%(asctime)s] [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    file_handler.setFormatter(file_formatter)
+    
+    root_logger = logging.getLogger("browserbot")
+    root_logger.addHandler(file_handler)
+    try:
+        yield log_file
+    finally:
+        root_logger.removeHandler(file_handler)
+        file_handler.close()
 
 from browserbot.config.settings import settings
 from browserbot.models.action_log import ActionLog
@@ -30,6 +60,8 @@ from browserbot.agents.code_generator.coordinator import PipelineCoordinator
 from browserbot.agents.packager.packager import Packager
 from browserbot.agents.code_generator.manifest import MCPToolManifest
 from browserbot.server.db import SessionStateStore
+from browserbot.models.stage_event import StageEvent
+from browserbot.server.ws_manager import ws_manager
 from browserbot.server.schemas import (
     RecordRequest,
     SessionResponse,
@@ -72,72 +104,73 @@ def run_recording_in_background(
     if url:
         cmd.append(url)
 
-    log.info(
-        "Launching Playwright codegen in background task",
-        extra={"session_id": session_id, "cmd": " ".join(cmd)}
-    )
+    with capture_session_logs(session_id, session_json_path):
+        log.info(
+            "Launching Playwright codegen in background task",
+            extra={"session_id": session_id, "cmd": " ".join(cmd)}
+        )
 
-    try:
-        res = subprocess.run(cmd, check=False)
-        if res.returncode != 0:
-            log.error("Playwright codegen process exited non-zero", extra={"session_id": session_id, "code": res.returncode})
+        try:
+            res = subprocess.run(cmd, check=False)
+            if res.returncode != 0:
+                log.error("Playwright codegen process exited non-zero", extra={"session_id": session_id, "code": res.returncode})
+                db = SessionStateStore()
+                db.update_session(session_id, "failed")
+                return
+        except Exception as exc:
+            log.error("Failed to run playwright codegen subprocess", extra={"session_id": session_id, "error": str(exc)})
             db = SessionStateStore()
             db.update_session(session_id, "failed")
             return
-    except Exception as exc:
-        log.error("Failed to run playwright codegen subprocess", extra={"session_id": session_id, "error": str(exc)})
-        db = SessionStateStore()
-        db.update_session(session_id, "failed")
-        return
 
-    if not raw_script_path.exists() or raw_script_path.stat().st_size == 0:
-        log.error("Playwright raw script is missing or empty after recording", extra={"session_id": session_id})
-        db = SessionStateStore()
-        db.update_session(session_id, "failed")
-        return
+        if not raw_script_path.exists() or raw_script_path.stat().st_size == 0:
+            log.error("Playwright raw script is missing or empty after recording", extra={"session_id": session_id})
+            db = SessionStateStore()
+            db.update_session(session_id, "failed")
+            return
 
-    try:
-        # Convert raw playwright script to ActionLog schema
-        site = ""
-        if url:
-            parsed = urllib.parse.urlparse(url)
-            site = parsed.netloc or ""
+        try:
+            # Convert raw playwright script to ActionLog schema
+            site = ""
+            if url:
+                parsed = urllib.parse.urlparse(url)
+                site = parsed.netloc or ""
 
-        action_log = convert_codegen_file(
-            raw_script_path,
-            site=site,
-            session_id=session_id,
-            recorded_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            workflow_hint=workflow_hint,
-        )
+            action_log = convert_codegen_file(
+                raw_script_path,
+                site=site,
+                session_id=session_id,
+                recorded_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                workflow_hint=workflow_hint,
+            )
 
-        # Redact any PII/secrets before writing to disk
-        scrub_result = scrub(action_log)
-        scrubbed_log = scrub_result.action_log
-        scrubbed_log.to_file(session_json_path)
+            # Redact any PII/secrets before writing to disk
+            scrub_result = scrub(action_log)
+            scrubbed_log = scrub_result.action_log
+            scrubbed_log.to_file(session_json_path)
 
-        # Save secrets map to git-ignored JSON file if secrets were found
-        if scrub_result.value_map:
-            secrets_path = session_json_path.parent / f"{session_id}_secrets.json"
-            reverse_map = {v: k for k, v in scrub_result.value_map.items()}
-            with open(secrets_path, "w", encoding="utf-8") as f:
-                json.dump(reverse_map, f, indent=2)
-
-        # Update Session State DB
-        db = SessionStateStore()
-        sess = db.get_session(session_id)
-        if sess:
-            paths = sess["artifact_paths"]
+            # Save secrets map to git-ignored JSON file if secrets were found
             if scrub_result.value_map:
-                paths["secrets"] = str(session_json_path.parent / f"{session_id}_secrets.json")
-            db.update_session(session_id, "recorded", paths)
+                secrets_path = session_json_path.parent / f"{session_id}_secrets.json"
+                reverse_map = {v: k for k, v in scrub_result.value_map.items()}
+                with open(secrets_path, "w", encoding="utf-8") as f:
+                    json.dump(reverse_map, f, indent=2)
 
-        log.info("Background recording session completed and converted successfully", extra={"session_id": session_id})
+            # Update Session State DB
+            db = SessionStateStore()
+            sess = db.get_session(session_id)
+            if sess:
+                paths = sess["artifact_paths"]
+                if scrub_result.value_map:
+                    paths["secrets"] = str(session_json_path.parent / f"{session_id}_secrets.json")
+                db.update_session(session_id, "recorded", paths)
 
-    except Exception as exc:
-        log.error("Exception during background recording conversion", extra={"session_id": session_id, "error": str(exc)})
-        db = SessionStateStore()
-        db.update_session(session_id, "failed")
+            log.info("Background recording session completed and converted successfully", extra={"session_id": session_id})
+
+        except Exception as exc:
+            log.error("Exception during background recording conversion", extra={"session_id": session_id, "error": str(exc)})
+            db = SessionStateStore()
+            db.update_session(session_id, "failed")
 
 
 @router.post("/record", response_model=SessionResponse)
@@ -200,20 +233,22 @@ async def extract_parameters(id: str, dry_run: bool = True):
     if not action_log_path.exists():
         raise HTTPException(status_code=400, detail=f"Action log file not found at: {action_log_path}")
 
-    # Load and scrub log
-    action_log = ActionLog.from_file(action_log_path)
-    scrub_result = scrub(action_log)
-    scrubbed_log = scrub_result.action_log
+    db.update_session(id, "extracting", sess["artifact_paths"])
+    with capture_session_logs(id, action_log_path):
+        # Load and scrub log
+        action_log = ActionLog.from_file(action_log_path)
+        scrub_result = scrub(action_log)
+        scrubbed_log = scrub_result.action_log
 
-    extractor = PatternExtractor(dry_run=dry_run)
-    extractor_output = extractor.extract(scrubbed_log)
+        extractor = PatternExtractor(dry_run=dry_run)
+        extractor_output = extractor.extract(scrubbed_log)
 
-    extractor_output_path = action_log_path.parent / f"{id}_extractor_output.json"
-    extractor_output_path.write_text(extractor_output.model_dump_json(indent=2), encoding="utf-8")
+        extractor_output_path = action_log_path.parent / f"{id}_extractor_output.json"
+        extractor_output_path.write_text(extractor_output.model_dump_json(indent=2), encoding="utf-8")
 
-    paths = sess["artifact_paths"]
-    paths["extractor_output"] = str(extractor_output_path)
-    db.update_session(id, "extracted", paths)
+        paths = sess["artifact_paths"]
+        paths["extractor_output"] = str(extractor_output_path)
+        db.update_session(id, "extracted", paths)
 
     return json.loads(extractor_output_path.read_text(encoding="utf-8"))
 
@@ -230,48 +265,50 @@ async def confirm_parameters(id: str, req: ConfirmRequest, output_dir: str | Non
     if not action_log_path.exists():
         raise HTTPException(status_code=400, detail=f"Action log file not found at: {action_log_path}")
 
-    action_log = ActionLog.from_file(action_log_path)
-    scrub_result = scrub(action_log)
-    scrubbed_log = scrub_result.action_log
+    db.update_session(id, "confirming", sess["artifact_paths"])
+    with capture_session_logs(id, action_log_path):
+        action_log = ActionLog.from_file(action_log_path)
+        scrub_result = scrub(action_log)
+        scrubbed_log = scrub_result.action_log
 
-    from browserbot.agents.pattern_extractor.confirmer import ConfirmedOutput
-    from browserbot.agents.pattern_extractor.models import ExtractedParameter
-    confirmed_params = []
-    for p in req.parameters:
-        confirmed_params.append(
-            ExtractedParameter(
-                name=p.name,
-                example_value=str(p.example_value),
-                log_step_index=p.log_step_index,
-                description=p.description,
-                is_sensitive=p.is_sensitive,
-                is_optional=p.is_optional,
+        from browserbot.agents.pattern_extractor.confirmer import ConfirmedOutput
+        from browserbot.agents.pattern_extractor.models import ExtractedParameter
+        confirmed_params = []
+        for p in req.parameters:
+            confirmed_params.append(
+                ExtractedParameter(
+                    name=p.name,
+                    example_value=str(p.example_value),
+                    log_step_index=p.log_step_index,
+                    description=p.description,
+                    is_sensitive=p.is_sensitive,
+                    is_optional=p.is_optional,
+                )
             )
-        )
-    confirmed_output = ConfirmedOutput(parameters=confirmed_params)
+        confirmed_output = ConfirmedOutput(parameters=confirmed_params)
 
-    confirmed_output_path = action_log_path.parent / f"{id}_confirmed_output.json"
-    extractor_output = confirmed_output.to_extractor_output()
-    confirmed_output_path.write_text(extractor_output.model_dump_json(indent=2), encoding="utf-8")
+        confirmed_output_path = action_log_path.parent / f"{id}_confirmed_output.json"
+        extractor_output = confirmed_output.to_extractor_output()
+        confirmed_output_path.write_text(extractor_output.model_dump_json(indent=2), encoding="utf-8")
 
-    spec = generate_workflow_spec(scrubbed_log, confirmed_output)
+        spec = generate_workflow_spec(scrubbed_log, confirmed_output)
 
-    if not output_dir:
-        site = scrubbed_log.metadata.site or "unknown"
-        site_sanitized = re.sub(r"[^a-zA-Z0-9]", "_", site).lower().strip("_")
-        output_dir_path = settings.generated_tools_dir / site_sanitized
-    else:
-        output_dir_path = Path(output_dir)
+        if not output_dir:
+            site = scrubbed_log.metadata.site or "unknown"
+            site_sanitized = re.sub(r"[^a-zA-Z0-9]", "_", site).lower().strip("_")
+            output_dir_path = settings.generated_tools_dir / site_sanitized
+        else:
+            output_dir_path = Path(output_dir)
 
-    output_dir_path.mkdir(parents=True, exist_ok=True)
-    spec_path = output_dir_path / "workflow_spec.json"
-    spec.to_file(spec_path)
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        spec_path = output_dir_path / "workflow_spec.json"
+        spec.to_file(spec_path)
 
-    paths = sess["artifact_paths"]
-    paths["confirmed_output"] = str(confirmed_output_path)
-    paths["workflow_spec"] = str(spec_path)
-    paths["output_dir"] = str(output_dir_path)
-    db.update_session(id, "confirmed", paths)
+        paths = sess["artifact_paths"]
+        paths["confirmed_output"] = str(confirmed_output_path)
+        paths["workflow_spec"] = str(spec_path)
+        paths["output_dir"] = str(output_dir_path)
+        db.update_session(id, "confirmed", paths)
 
     return json.loads(spec_path.read_text(encoding="utf-8"))
 
@@ -291,29 +328,44 @@ async def generate_code(id: str, req: GenerateRequest, dry_run: bool = True):
     spec = WorkflowSpec.from_file(spec_path)
     output_dir_path = Path(req.output_dir or sess["artifact_paths"]["output_dir"])
 
-    generator = CodeGenerator(dry_run=dry_run)
-    pipeline = ValidationPipeline()
-    coordinator = PipelineCoordinator(
-        generator=generator,
-        pipeline=pipeline,
-        output_dir=output_dir_path,
-    )
+    db.update_session(id, "generating", sess["artifact_paths"])
+    
+    # Capture current event loop reference for thread-safe cross-thread scheduling
+    loop = asyncio.get_running_loop()
+    
+    def on_stage_event(event: StageEvent):
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast(id, event.to_dict()),
+            loop
+        )
 
-    secret_overrides = {}
-    secrets_path = Path(sess["artifact_paths"]["action_log"]).parent / f"{id}_secrets.json"
-    if secrets_path.exists():
-        try:
-            with open(secrets_path, "r", encoding="utf-8") as f:
-                secret_overrides = json.load(f)
-        except Exception as exc:
-            log.warning("Failed to load secrets mapping", extra={"error": str(exc)})
+    with capture_session_logs(id, spec_path):
+        generator = CodeGenerator(dry_run=dry_run)
+        pipeline = ValidationPipeline()
+        coordinator = PipelineCoordinator(
+            generator=generator,
+            pipeline=pipeline,
+            output_dir=output_dir_path,
+            on_stage_event=on_stage_event,
+        )
 
-    report = coordinator.run(spec, secret_overrides=secret_overrides)
+        secret_overrides = {}
+        secrets_path = Path(sess["artifact_paths"]["action_log"]).parent / f"{id}_secrets.json"
+        if secrets_path.exists():
+            try:
+                with open(secrets_path, "r", encoding="utf-8") as f:
+                    secret_overrides = json.load(f)
+            except Exception as exc:
+                log.warning("Failed to load secrets mapping", extra={"error": str(exc)})
 
-    stage = "generated" if report.overall_success else "failed"
-    paths = sess["artifact_paths"]
-    paths["validation_report"] = str(output_dir_path / "validation_report.json")
-    db.update_session(id, stage, paths)
+        # Execute CPU-bound retry coordinator inside worker thread to avoid blocking FastAPI server loop
+        from anyio import to_thread
+        report = await to_thread.run_sync(coordinator.run, spec, secret_overrides)
+
+        stage = "generated" if report.overall_success else "failed"
+        paths = sess["artifact_paths"]
+        paths["validation_report"] = str(output_dir_path / "validation_report.json")
+        db.update_session(id, stage, paths)
 
     return json.loads(Path(paths["validation_report"]).read_text(encoding="utf-8"))
 
@@ -331,27 +383,30 @@ async def package_tool(id: str, req: PackageRequest):
     if not manifest_path.exists():
         raise HTTPException(status_code=400, detail="mcp_tool.json not found in output directory")
 
-    manifest = MCPToolManifest.from_file(manifest_path)
-    package_name = manifest.mcp_tool_name
+    db.update_session(id, "packaging", sess["artifact_paths"])
+    with capture_session_logs(id, output_dir_path / "workflow_spec.json"):
+        manifest = MCPToolManifest.from_file(manifest_path)
+        package_name = manifest.mcp_tool_name
 
-    if not req.package_dir:
-        package_dir_path = Path("packages") / package_name
-    else:
-        package_dir_path = Path(req.package_dir)
+        if not req.package_dir:
+            package_dir_path = Path("packages") / package_name
+        else:
+            package_dir_path = Path(req.package_dir)
 
-    packager = Packager()
-    pkg = packager.package(output_dir_path, package_dir_path)
-    verified = packager.verify_installation(package_dir_path)
+        packager = Packager()
+        pkg = packager.package(output_dir_path, package_dir_path)
+        verified = packager.verify_installation(package_dir_path)
 
-    if not verified:
-        db.update_session(id, "failed")
-        raise HTTPException(status_code=500, detail="Package verification check failed")
+        if not verified:
+            db.update_session(id, "failed")
+            raise HTTPException(status_code=500, detail="Package verification check failed")
 
-    paths = sess["artifact_paths"]
-    paths["package_dir"] = str(package_dir_path)
-    paths["browserbot_package"] = str(package_dir_path / "browserbot_package.json")
-    db.update_session(id, "packaged", paths)
+        paths = sess["artifact_paths"]
+        paths["package_dir"] = str(package_dir_path)
+        paths["browserbot_package"] = str(package_dir_path / "browserbot_package.json")
+        db.update_session(id, "packaged", paths)
 
+    await ws_manager.cleanup_session(id)
     return json.loads(Path(paths["browserbot_package"]).read_text(encoding="utf-8"))
 
 
@@ -364,3 +419,72 @@ async def update_session_stage(id: str, stage: str):
         raise HTTPException(status_code=404, detail=f"Session {id} not found")
     db.update_session(id, stage, sess["artifact_paths"])
     return db.get_session(id)
+
+
+@router.get("/{id}/logs")
+async def stream_session_logs(id: str):
+    """Streams session execution logs using Server-Sent Events (SSE)."""
+    db = SessionStateStore()
+    sess = db.get_session(id)
+    if not sess:
+        raise HTTPException(status_code=404, detail=f"Session {id} not found")
+
+    action_log = Path(sess["artifact_paths"]["action_log"])
+    log_file = action_log.parent / f"{id}_telemetry.log"
+
+    async def log_generator():
+        # First check if file exists, wait a short moment if it is newly starting
+        for _ in range(10):
+            if log_file.exists():
+                break
+            await asyncio.sleep(0.1)
+
+        if not log_file.exists():
+            # Initial placeholder
+            yield "data: [INFO] Console initialized. Ready to compile.\n\n"
+            return
+
+        # Read historical logs first
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                yield f"data: {line.strip()}\n\n"
+
+            # Stream updates in real time while session is in active stages
+            while True:
+                line = f.readline()
+                if line:
+                    yield f"data: {line.strip()}\n\n"
+                else:
+                    # Refresh session state to check if we are finished
+                    current_sess = db.get_session(id)
+                    if not current_sess or current_sess["stage"] not in (
+                        "recording",
+                        "extracting",
+                        "confirming",
+                        "generating",
+                        "packaging",
+                    ):
+                        # Consume any final lines before ending the stream
+                        await asyncio.sleep(0.5)
+                        line = f.readline()
+                        if line:
+                            yield f"data: {line.strip()}\n\n"
+                        break
+                    await asyncio.sleep(0.1)
+
+    return StreamingResponse(log_generator(), media_type="text/event-stream")
+
+
+@router.websocket("/ws/sessions/{id}")
+async def session_websocket(id: str, websocket: WebSocket):
+    """Establishes session-specific WebSocket diagnostic streams."""
+    from fastapi import WebSocketDisconnect
+    await ws_manager.connect(id, websocket)
+    try:
+        while True:
+            # Keep connection alive; wait for client messages or disconnects
+            _ = await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect(id, websocket)

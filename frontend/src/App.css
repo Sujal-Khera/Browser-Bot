@@ -16,3 +16,50 @@
 .animate-slide-in {
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Developer Console Drawer Styles */
+.console-drawer {
+  position: relative;
+  width: 100%;
+  z-index: 40;
+  box-sizing: border-box;
+}
+
+.console-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+}
+
+.console-header {
+  user-select: none;
+}
+
+/* Custom Scrollbar Styles for High Density Monospace logs */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--code-bg);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--text);
+  opacity: 0.6;
+}
+
+/* Monospace font settings */
+.console-drawer code,
+.console-drawer pre,
+.console-drawer .font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+}

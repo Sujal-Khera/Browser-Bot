@@ -13,11 +13,13 @@ import py_compile
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from browserbot.agents.validator.harness import DryRunHarness
 from browserbot.logging import get_logger
 from browserbot.models.validation_report import StageResult, ValidationReport
 from browserbot.models.workflow_spec import WorkflowSpec
+from browserbot.models.stage_event import StageEvent, get_base64_screenshot
 
 log = get_logger(__name__)
 
@@ -28,7 +30,13 @@ class ValidationPipeline:
     def __init__(self, screenshot_dir: Path | None = None) -> None:
         self.screenshot_dir = screenshot_dir or Path("screenshots")
 
-    def validate(self, spec: WorkflowSpec, tool_dir: Path, secret_overrides: dict[str, str] | None = None) -> ValidationReport:
+    def validate(
+        self,
+        spec: WorkflowSpec,
+        tool_dir: Path,
+        secret_overrides: dict[str, str] | None = None,
+        on_stage_event: Callable[[StageEvent], None] | None = None,
+    ) -> ValidationReport:
         """
         Executes all validation stages on the generated tool directory.
 
@@ -45,9 +53,17 @@ class ValidationPipeline:
         
         log.info("Starting validation pipeline", extra={"tool_dir": str(tool_dir)})
 
+        def emit_event(stage_name: str, status: str, message: str, metadata: dict[str, Any] | None = None):
+            if on_stage_event:
+                try:
+                    on_stage_event(StageEvent(stage_name, status, message, metadata=metadata))
+                except Exception as exc:
+                    log.error("Stage event callback raised exception (isolated)", exc_info=True)
+
         # ---------------------------------------------------------
         # Stage 1: File Existence
         # ---------------------------------------------------------
+        emit_event("stage_5_file_existence", "in_progress", "Checking generated files existence")
         exists_server = server_py.exists()
         exists_manifest = mcp_tool_json.exists()
         
@@ -62,6 +78,7 @@ class ValidationPipeline:
             message=file_exist_msg,
             details=file_exist_details,
         )
+        emit_event("stage_5_file_existence", "success" if file_exist_ok else "failed", file_exist_msg)
 
         # ---------------------------------------------------------
         # Stage 2: Compilation
@@ -71,6 +88,7 @@ class ValidationPipeline:
         compile_details = {}
 
         if file_exist_ok:
+            emit_event("stage_5_compilation", "in_progress", "Compiling generated python script")
             try:
                 py_compile.compile(str(server_py), doraise=True)
                 compile_ok = True
@@ -83,6 +101,9 @@ class ValidationPipeline:
                 compile_ok = False
                 compile_msg = f"Unexpected compilation error: {exc}"
                 compile_details = {"error": str(exc)}
+            emit_event("stage_5_compilation", "success" if compile_ok else "failed", compile_msg)
+        else:
+            emit_event("stage_5_compilation", "skipped", compile_msg)
 
         stage_compilation = StageResult(
             success=compile_ok,
@@ -98,6 +119,7 @@ class ValidationPipeline:
         import_details = {}
 
         if compile_ok:
+            emit_event("stage_5_import_check", "in_progress", "Performing import validation check")
             try:
                 mod_spec = importlib.util.spec_from_file_location("test_import", str(server_py))
                 if mod_spec and mod_spec.loader:
@@ -111,6 +133,9 @@ class ValidationPipeline:
                 import_ok = False
                 import_msg = f"Import failed: {type(exc).__name__}: {str(exc)}"
                 import_details = {"error": str(exc)}
+            emit_event("stage_5_import_check", "success" if import_ok else "failed", import_msg)
+        else:
+            emit_event("stage_5_import_check", "skipped", import_msg)
 
         stage_import_check = StageResult(
             success=import_ok,
@@ -126,6 +151,7 @@ class ValidationPipeline:
         runtime_details = {}
 
         if import_ok:
+            emit_event("stage_5_runtime_dry_run", "in_progress", "Running sandboxed execution dry-run trial")
             # Prepare inputs from spec defaults
             inputs = {p.name: p.example_value for p in spec.parameters}
             if secret_overrides:
@@ -148,6 +174,7 @@ class ValidationPipeline:
                 "exception": res.exception,
             }
 
+            metadata = {}
             if res.success:
                 # Stage 5 — output validation (Step 6.4: tools return prose, not JSON)
                 # The harness already confirmed no error sentinel.
@@ -184,6 +211,13 @@ class ValidationPipeline:
                 runtime_msg = f"Dry-run execution failed: {res.exception}"
                 if res.screenshot_path:
                     runtime_details["screenshot_captured"] = str(res.screenshot_path)
+                    encoded_ss = get_base64_screenshot(str(res.screenshot_path))
+                    if encoded_ss:
+                        metadata["screenshot"] = encoded_ss
+
+            emit_event("stage_5_runtime_dry_run", "success" if runtime_ok else "failed", runtime_msg, metadata=metadata)
+        else:
+            emit_event("stage_5_runtime_dry_run", "skipped", runtime_msg)
 
         stage_runtime_dry_run = StageResult(
             success=runtime_ok,

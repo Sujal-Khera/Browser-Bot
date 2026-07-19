@@ -12,7 +12,7 @@ import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from browserbot.agents.code_generator.coordinator import PipelineCoordinator
 from browserbot.agents.code_generator.generator import CodeGenerator
@@ -28,6 +28,7 @@ from browserbot.models.validation_report import ValidationReport
 from browserbot.models.workflow_spec import WorkflowSpec
 from browserbot.recorder.scrubber import scrub
 from browserbot.runtime.registry import ClaudeDesktopRegistry
+from browserbot.models.stage_event import StageEvent
 
 log = get_logger(__name__)
 
@@ -55,6 +56,7 @@ class OrchestrationPipeline:
         register: bool = False,
         param_overrides: dict[str, Any] | None = None,
         registry_config_path: Path | str | None = None,
+        on_stage_event: Callable[[StageEvent], None] | None = None,
     ) -> dict[str, Any]:
         """
         Runs the full pipeline. Writes pipeline_diagnostics.json to output_dir.
@@ -66,6 +68,7 @@ class OrchestrationPipeline:
             register: Whether to register the compiled tool with Claude Desktop.
             param_overrides: Optional overrides for confirmed parameters.
             registry_config_path: Optional path override to Claude config file.
+            on_stage_event: Callback observer interface for stage events.
 
         Returns:
             A dictionary containing stage output models and status metrics.
@@ -84,6 +87,13 @@ class OrchestrationPipeline:
                 "register": register,
             },
         )
+
+        def emit_event(stage_name: str, status: str, message: str, metadata: dict[str, Any] | None = None):
+            if on_stage_event:
+                try:
+                    on_stage_event(StageEvent(stage_name, status, message, metadata=metadata))
+                except Exception as exc:
+                    log.error("Stage event callback raised exception (isolated)", exc_info=True)
 
         stages_status = {
             "stage_1_scrubbing": {"success": False, "message": "Pending", "error": None, "duration_seconds": None},
@@ -112,6 +122,7 @@ class OrchestrationPipeline:
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_1_scrubbing"]["message"] = "In progress"
+            emit_event("stage_1_scrubbing", "in_progress", "Load and scrub raw action log")
             if not raw_action_log_path.exists():
                 raise FileNotFoundError(f"Action log file not found: {raw_action_log_path}")
 
@@ -123,24 +134,28 @@ class OrchestrationPipeline:
             stages_status["stage_1_scrubbing"]["success"] = True
             stages_status["stage_1_scrubbing"]["message"] = "Scrub complete"
             stages_status["stage_1_scrubbing"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_1_scrubbing", "success", "Scrub complete")
 
             # ----------------------------------------------------
             # Stage 2: Pattern Extraction
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_2_pattern_extraction"]["message"] = "In progress"
+            emit_event("stage_2_pattern_extraction", "in_progress", "Running pattern extractor agent")
             log.info("Running pattern extractor agent")
             extractor = PatternExtractor(dry_run=self.dry_run, backend=self.backend)
             extractor_output = extractor.extract(scrubbed_log)
             stages_status["stage_2_pattern_extraction"]["success"] = True
             stages_status["stage_2_pattern_extraction"]["message"] = "Pattern extraction complete"
             stages_status["stage_2_pattern_extraction"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_2_pattern_extraction", "success", "Pattern extraction complete")
 
             # ----------------------------------------------------
             # Stage 3: Parameter Confirmation (auto-confirm mode)
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_3_parameter_confirmation"]["message"] = "In progress"
+            emit_event("stage_3_parameter_confirmation", "in_progress", "Confirming parameters (auto-confirm mode)")
             log.info("Confirming parameters (auto-confirm mode)")
             confirmed_output = confirm_parameters(extractor_output, auto_confirm=True)
             
@@ -153,12 +168,14 @@ class OrchestrationPipeline:
             stages_status["stage_3_parameter_confirmation"]["success"] = True
             stages_status["stage_3_parameter_confirmation"]["message"] = "Parameters confirmed"
             stages_status["stage_3_parameter_confirmation"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_3_parameter_confirmation", "success", "Parameters confirmed")
 
             # ----------------------------------------------------
             # Stage 4: Generate Workflow Spec IR
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_4_ir_generation"]["message"] = "In progress"
+            emit_event("stage_4_ir_generation", "in_progress", "Generating Intermediate Representation (IR) workflow spec")
             log.info("Generating Intermediate Representation (IR) workflow spec")
             spec = generate_workflow_spec(scrubbed_log, confirmed_output)
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -167,12 +184,14 @@ class OrchestrationPipeline:
             stages_status["stage_4_ir_generation"]["success"] = True
             stages_status["stage_4_ir_generation"]["message"] = "IR Spec generated"
             stages_status["stage_4_ir_generation"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_4_ir_generation", "success", "IR Spec generated")
 
             # ----------------------------------------------------
             # Stage 5: Code Generation, Validation & Bounded Retries
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_5_codegen_validation"]["message"] = "In progress"
+            emit_event("stage_5_codegen_validation", "in_progress", "Running code generation validator pipeline coordinator")
             log.info("Running code generation validator pipeline coordinator")
             generator = CodeGenerator(dry_run=self.dry_run, backend=self.backend)
             pipeline = ValidationPipeline()
@@ -180,6 +199,7 @@ class OrchestrationPipeline:
                 generator=generator,
                 pipeline=pipeline,
                 output_dir=output_dir,
+                on_stage_event=on_stage_event,
             )
             secret_overrides = {}
             session_id = scrubbed_log.metadata.session_id
@@ -204,12 +224,14 @@ class OrchestrationPipeline:
             stages_status["stage_5_codegen_validation"]["success"] = True
             stages_status["stage_5_codegen_validation"]["message"] = "Code compilation and validation passed"
             stages_status["stage_5_codegen_validation"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_5_codegen_validation", "success", "Code compilation and validation passed")
 
             # ----------------------------------------------------
             # Stage 6: Packaging & Installation verification
             # ----------------------------------------------------
             t_stage = time.perf_counter()
             stages_status["stage_6_packaging"]["message"] = "In progress"
+            emit_event("stage_6_packaging", "in_progress", "Compiling installable package")
             log.info("Compiling installable package")
             packager = Packager()
             package = packager.package(output_dir, package_dir)
@@ -219,6 +241,7 @@ class OrchestrationPipeline:
             stages_status["stage_6_packaging"]["success"] = True
             stages_status["stage_6_packaging"]["message"] = "Package generated and verified successfully"
             stages_status["stage_6_packaging"]["duration_seconds"] = time.perf_counter() - t_stage
+            emit_event("stage_6_packaging", "success", "Package generated and verified successfully")
 
             # ----------------------------------------------------
             # Stage 7: Claude Desktop Registration (optional)
@@ -226,15 +249,18 @@ class OrchestrationPipeline:
             t_stage = time.perf_counter()
             if register:
                 stages_status["stage_7_claude_registration"]["message"] = "In progress"
+                emit_event("stage_7_claude_registration", "in_progress", "Registering packaged tool with Claude Desktop")
                 log.info("Registering packaged tool with Claude Desktop")
                 registry = ClaudeDesktopRegistry(config_path=Path(registry_config_path) if registry_config_path else None)
                 registered_config = registry.register(package)
                 stages_status["stage_7_claude_registration"]["success"] = True
                 stages_status["stage_7_claude_registration"]["message"] = "Tool registered in Claude config"
                 stages_status["stage_7_claude_registration"]["duration_seconds"] = time.perf_counter() - t_stage
+                emit_event("stage_7_claude_registration", "success", "Tool registered in Claude config")
             else:
                 stages_status["stage_7_claude_registration"]["message"] = "Skipped"
                 stages_status["stage_7_claude_registration"]["duration_seconds"] = 0.0
+                emit_event("stage_7_claude_registration", "skipped", "Registration skipped")
 
             overall_success = True
             log.info("End-to-end pipeline completed successfully")
@@ -248,6 +274,7 @@ class OrchestrationPipeline:
                     status["message"] = "Failed during stage execution"
                     status["error"] = failure_reason
                     status["duration_seconds"] = time.perf_counter() - t_stage
+                    emit_event(stage_name, "failed", f"Failed during stage execution: {failure_reason}")
                     break
             raise
         except Exception as exc:
@@ -259,9 +286,10 @@ class OrchestrationPipeline:
             for stage_name, status in stages_status.items():
                 if status["message"] == "In progress":
                     status["success"] = False
-                    status["message"] = f"Failed during stage execution"
+                    status["message"] = "Failed during stage execution"
                     status["error"] = failure_reason
                     status["duration_seconds"] = time.perf_counter() - t_stage
+                    emit_event(stage_name, "failed", f"Failed during stage execution: {failure_reason}")
                     break
             raise PipelineOrchestrationError(f"Stage execution failed: {exc}") from exc
 

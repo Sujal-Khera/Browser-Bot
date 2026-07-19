@@ -1,0 +1,52 @@
+{
+  "pipeline_version": "0.1.0",
+  "execution_timestamp": "2026-07-18T17:46:36.831071+00:00",
+  "dry_run": true,
+  "total_duration_seconds": 0.0029501999997592065,
+  "stages": {
+    "stage_1_scrubbing": {
+      "success": false,
+      "message": "Failed during stage execution",
+      "error": "Action log file not found: C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\dummy_log.json",
+      "duration_seconds": 0.001765299999533454
+    },
+    "stage_2_pattern_extraction": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    },
+    "stage_3_parameter_confirmation": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    },
+    "stage_4_ir_generation": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    },
+    "stage_5_codegen_validation": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    },
+    "stage_6_packaging": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    },
+    "stage_7_claude_registration": {
+      "success": false,
+      "message": "Pending",
+      "error": null,
+      "duration_seconds": null
+    }
+  },
+  "overall_success": false,
+  "failure_reason": "Action log file not found: C:\\Users\\hp\\OneDrive\\Desktop\\BrowserBot\\dummy_log.json"
+}

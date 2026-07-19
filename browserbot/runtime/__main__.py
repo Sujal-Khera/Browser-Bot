@@ -27,6 +27,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from browserbot import __version__
 from browserbot.models.package import BrowserBotPackage
 from browserbot.runtime.registry import ClaudeDesktopRegistry, RegistrationError
 from browserbot.orchestrator.self_healing import self_heal_package

@@ -40,3 +40,15 @@ async def register_package(name: str, req: RegisterRequest):
     except Exception as exc:
         log.error("Failed to register package with Claude Desktop", extra={"package": name, "error": str(exc)})
         raise HTTPException(status_code=500, detail=f"Registration failed: {exc}")
+
+
+@router.get("/{name}/upgrade-status")
+async def get_package_upgrade_status(name: str):
+    """Returns the version compatibility and upgrade status of a package."""
+    package_dir = Path("packages") / name
+    if not package_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Package directory packages/{name} not found.")
+
+    from browserbot.version import detect_package_upgrade
+    status = detect_package_upgrade(package_dir)
+    return status.model_dump(mode="json")

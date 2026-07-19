@@ -469,3 +469,48 @@ def test_confirm_endpoint_invalid_names(client: TestClient, tmp_path: Path) -> N
         client.post(f"/sessions/{session_id}/confirm", json=confirm_payload)
     assert "Workflow Spec validation failed" in str(exc_info.value)
 
+
+def test_logs_stream_endpoint(client: TestClient, tmp_path: Path) -> None:
+    """Verifies that the session logs endpoint streams log files in SSE format."""
+    session_id = "session_logs_stream_123"
+    
+    # Write some mock logs to the telemetry log file
+    action_log_file = tmp_path / f"{session_id}.json"
+    action_log_content = {
+        "schema_version": "1.0",
+        "metadata": {
+            "session_id": session_id,
+            "recorded_at": "2026-07-17T12:00:00Z",
+            "site": "example.com",
+            "browserbot_version": "0.1.0",
+            "step_count": 1,
+        },
+        "steps": []
+    }
+    action_log_file.write_text(json.dumps(action_log_content), encoding="utf-8")
+    
+    # Pre-populate telemetry log
+    log_file = tmp_path / f"{session_id}_telemetry.log"
+    log_file.write_text("[22:30:15] [INFO] Starting workflow compilation\n[22:30:16] [WARNING] Small warning\n", encoding="utf-8")
+
+    db = SessionStateStore()
+    db.create_session(session_id, "recorded", {"action_log": str(action_log_file)})
+
+    # Call logs endpoint using TestClient.stream (to read SSE chunked data)
+    with client.stream("GET", f"/sessions/{session_id}/logs") as response:
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        
+        # Read the first few lines of the stream
+        lines = []
+        for line in response.iter_lines():
+            if line:
+                lines.append(line)
+            if len(lines) >= 2:
+                break
+                
+        assert len(lines) == 2
+        assert "Starting workflow compilation" in lines[0]
+        assert "Small warning" in lines[1]
+
+

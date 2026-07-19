@@ -150,8 +150,8 @@ async def test_resolve_locator_raw_selector_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_locator_timeout_returns_first_candidate() -> None:
-    """Verifies that resolution times out gracefully and returns the first candidate when none succeed."""
+async def test_resolve_locator_timeout_raises_timeout_error() -> None:
+    """Verifies that resolution times out gracefully and raises TimeoutError when no candidates match."""
     mock_page = MagicMock()
 
     # All candidates return count 0
@@ -170,7 +170,5 @@ async def test_resolve_locator_timeout_returns_first_candidate() -> None:
         "aria_name": "Fake order code",
     }
 
-    # Resolution should time out and return the first candidate (role-based)
-    resolved = await resolve_locator(mock_page, selector, timeout_ms=10)
-    assert resolved == mock_fail_loc
-    mock_page.get_by_role.assert_called_with("textbox", name="Fake order code")
+    with pytest.raises(TimeoutError, match="Could not resolve any element for selector"):
+        await resolve_locator(mock_page, selector, timeout_ms=10)

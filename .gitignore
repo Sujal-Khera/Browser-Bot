@@ -41,4 +41,9 @@ packages/
 
 # Validation screenshots (Step 5.2 failure captures)
 screenshots/
-
+
+.agents/
+.cursor/
+.codex/
+.gemini/
+.impeccable/
